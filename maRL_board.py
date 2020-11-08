@@ -121,10 +121,10 @@ class MarelleBoard():
         legal_action_ids = []
 
         if self.phase == "place":
-            legal_actions = self.place_token_legal_actions()
+            legal_actions = self.place_token_legal_actions(player)
         
         elif self.phase == "move":
-            legal_actions = self.move_token_legal_actions()
+            legal_actions = self.move_token_legal_actions(player)
         
         for action in legal_actions:
             legal_action_ids.append(self.action_id_by_action[action])
