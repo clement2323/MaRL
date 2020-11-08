@@ -2,15 +2,7 @@ import networkx as nx
 
 class MarelleBoard():
     '''
-    player 1 versus player -1
-    3 phases : place, move and end
-    initialize_game() => Reset the board
-    print_board() => render the board
-    action_list_by_id => dict id : action
-    action_id_by_action => dict action : id
-    play_action(action_id) => play an action
-    get_legal_actions() => get list of action ids that are legal
-    check_if_end() => returns 0 if not ended, 1 or -1 if a player won
+    TODO : Add rule to prevent removing a token in a line when capturing
     '''
     def __init__(self):
         self.N_TOKENS_PER_PLAYER = 9
@@ -262,21 +254,21 @@ class MarelleBoard():
         if self.players[1]["played_tokens"] == self.N_TOKENS_PER_PLAYER and self.players[-1]["played_tokens"] == self.N_TOKENS_PER_PLAYER:
             self.phase = "move"
 
-    def check_if_end(self):
+    def check_if_end(self, player):
         '''
         Returns 0 if the game is not ended and the id of the player if a player won
         '''
         if self.phase == "place":
             return 0
 
-        if self.players[1]["tokens_on_board"] <= 2:
-            #print("Game ended with player -1 as winner")
+        opponent = self.get_opponent(player)
+        if self.players[opponent]["tokens_on_board"] <= 2:
             self.phase = "end"
-            return -1
-        elif self.players[-1]["tokens_on_board"] <= 2:
-            #print("Game ended with player 1 as winner")
-            self.phase = "end"
-            return 1
+            return player
+        
+        if len(self.get_legal_action_ids(opponent) == 0):
+            return player
+
         return 0
 
     def get_opponent(self, player):
