@@ -230,14 +230,15 @@ class MarelleBoard():
         capture = False
 
         # step 1, horizontal (same t, different r)
-        r_capture = True
-        r_lines = [0, 1, 2]
-        for line_r in r_lines:
-            if nodes[line_r, t]["state"] != player:
-                r_capture = False
-                break
-        if r_capture == True:
-            return True
+        if (t % 2 == 0):
+            r_capture = True
+            r_lines = [0, 1, 2]
+            for line_r in r_lines:
+                if nodes[line_r, t]["state"] != player:
+                    r_capture = False
+                    break
+            if r_capture == True:
+                return True
 
         # step 2 : vertical (same r, different t)
         t_capture = False
@@ -258,22 +259,22 @@ class MarelleBoard():
         return False
     
     def change_phase_if_needed(self):
-        if self.players[1]["played_tokens"] == self.N_TOKENS_PER_PLAYER and self.players[-1]["played_tokens"] == N_TOKENS_PER_PLAYER:
+        if self.players[1]["played_tokens"] == self.N_TOKENS_PER_PLAYER and self.players[-1]["played_tokens"] == self.N_TOKENS_PER_PLAYER:
             self.phase = "move"
 
     def check_if_end(self):
         '''
         Returns 0 if the game is not ended and the id of the player if a player won
         '''
-        if self.phase != "move":
+        if self.phase == "place":
             return 0
 
-        if self.players[1]["tokens_on_board"] == 2:
-            print("Game ended with player -1 as winner")
+        if self.players[1]["tokens_on_board"] <= 2:
+            #print("Game ended with player -1 as winner")
             self.phase = "end"
             return -1
-        elif self.players[-1]["tokens_on_board"] == 2:
-            print("Game ended with player 1 as winner")
+        elif self.players[-1]["tokens_on_board"] <= 2:
+            #print("Game ended with player 1 as winner")
             self.phase = "end"
             return 1
         return 0
