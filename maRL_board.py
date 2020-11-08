@@ -1,5 +1,4 @@
 import networkx as nx
-import copy
 
 class MarelleBoard():
     '''
@@ -163,13 +162,13 @@ class MarelleBoard():
         legal_actions = []
         for node in self.graph.nodes:
             if self.graph.nodes[node]["state"] == 0:
-                temp_graph = copy.deepcopy(self.graph)
-                temp_graph.nodes[node]["state"] = player
+                self.graph.nodes[node]["state"] = player
                 if self.check_if_capture(temp_graph.nodes, node, player):
                     for opponent_node in opponent_nodes:
                         legal_actions.append((node, opponent_node))
                 else:
                     legal_actions.append((node, None))
+                self.graph.nodes[node]["state"] = 0
         
         return legal_actions
     
@@ -214,14 +213,15 @@ class MarelleBoard():
                 new_node = b
             else:
                 continue
-            temp_graph = copy.deepcopy(self.graph)
-            temp_graph.nodes[new_node]["state"] = player
-            temp_graph.nodes[cur_node]["state"] = 0
+            self.graph.nodes[new_node]["state"] = player
+            self.graph.nodes[cur_node]["state"] = 0
             if self.check_if_capture(temp_graph.nodes, new_node, player):
                 for opponent_node in opponent_nodes:
                     legal_actions.append((edge, opponent_node))
             else:
                 legal_actions.append((edge, None))
+            self.graph.nodes[new_node]["state"] = 0
+            self.graph.nodes[cur_node]["state"] = player
             
         return legal_actions
     
