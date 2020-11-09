@@ -106,7 +106,7 @@ class MarelleBoard():
         else:
             self.move_token_action(self.action_list_by_id[action_id], player)
         self.change_phase_if_needed()
-        self.check_if_end()
+        self.check_if_end(player)
     
     def get_legal_action_ids(self, player):
         legal_action_ids = []
