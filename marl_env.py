@@ -1,4 +1,55 @@
 import networkx as nx
+import gym
+from gym import spaces
+
+class MarelleGymEnv(gym.Env):
+    """Custom Environment that follows gym interface"""
+    metadata = {'render.modes': ['human']}
+    def __init__(self):
+        super(MarelleGymEnv, self).__init__()    
+    
+    # Define action and observation space
+    # They must be gym.spaces objects
+        self.board = MarelleBoard()
+        self.action_space = spaces.Discrete(len(self.board.id_to_action))    # Example for using image as input:
+        self.observation_space = spaces.Discrete(len(self.board.get_state()))
+        self.list_move = []
+        self.current_player = 1
+        
+    def step(self, action): 
+   
+        self.board.play_action(action,self.current_player)
+
+        observation=self.board.get_state()
+        done = self.board.check_if_end(self.current_player) != 0
+        reward = {}
+        reward["game_end"] = self.board.check_if_end(self.current_player) * self.current_player # equal to 1 or 0
+        
+        _, opponent_pos = self.board.id_to_action[action]
+        if opponent_pos != None:
+            reward["capture_token"] = 1
+        else:
+            reward["capture_token"] = 0
+
+        self.list_move.append(action)
+        info = ""
+        self.current_player = self.board.get_opponent(self.current_player)
+
+        return observation, reward, done, info
+    
+    # Execute one time step within the environment
+  
+    def reset(self):
+        self.current_player = 1
+        self.list_move = []
+        self.board.initialize_game()
+
+        return self.board.get_state()
+    # Reset
+
+    def render(self, mode='human', close=False):
+        self.board.print_board()
+
 
 class MarelleBoard():
     '''
