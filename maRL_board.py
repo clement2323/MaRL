@@ -266,7 +266,7 @@ class MarelleBoard():
             self.phase = "end"
             return player
         
-        if len(self.get_legal_action_ids(opponent) == 0):
+        if len(self.get_legal_action_ids(opponent)) == 0:
             return player
 
         return 0
