@@ -155,7 +155,7 @@ class MarelleBoard():
         for node in self.graph.nodes:
             if self.graph.nodes[node]["state"] == 0:
                 self.graph.nodes[node]["state"] = player
-                if self.check_if_capture(temp_graph.nodes, node, player):
+                if self.check_if_capture(self.graph.nodes, node, player):
                     for opponent_node in opponent_nodes:
                         legal_actions.append((node, opponent_node))
                 else:
@@ -207,7 +207,7 @@ class MarelleBoard():
                 continue
             self.graph.nodes[new_node]["state"] = player
             self.graph.nodes[cur_node]["state"] = 0
-            if self.check_if_capture(temp_graph.nodes, new_node, player):
+            if self.check_if_capture(self.graph.nodes, new_node, player):
                 for opponent_node in opponent_nodes:
                     legal_actions.append((edge, opponent_node))
             else:
