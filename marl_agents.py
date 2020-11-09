@@ -7,6 +7,7 @@ import pandas as pd
 import itertools
 import seaborn as sns
 import wandb
+import os
 
 class Agent(object):
     def __init__(self, env, player_id, epsilon=0):
@@ -73,7 +74,7 @@ class Agent(object):
         
         raise NotImplementedError
     
-    def train(self, n_trajectories, n_epoch, adversaire, log_wandb=False):
+    def train(self, n_trajectories, n_epoch, adversaire, log_wandb=False, save_model_freq = 50):
         """Training method
 
         Parameters
@@ -87,17 +88,17 @@ class Agent(object):
         rewards = []
         for epoch in range(n_epoch):
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, adversaire)
-            rewards.append(self.optimize_model(n_trajectories, adversaire))
+            rewards.append(epoch_reward)
             if (epoch+1)%5 == 0:
                 print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
             
             if log_wandb:
-                wandb.log({f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}'})
-                if (epoch+1) % 50 == 0:
-                    torch.save(model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))
+                wandb.log({"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss})
+                if (epoch+1) % save_model_freq == 0:
+                    torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))
 
         if log_wandb:    
-            torch.save(model.state_dict(), os.path.join(wandb.run.dir, f'model_final.pt'))
+            torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, 'model_final.pt'))
 
         # Plotting
         r = pd.DataFrame((itertools.chain(*(itertools.product([i], rewards[i]) for i in range(len(rewards))))), columns=['Epoch', 'Reward'])
