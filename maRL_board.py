@@ -27,21 +27,21 @@ class MarelleBoard():
         
         self.move_token_action_list = move_token_action_list
 
-        action_list_by_id = {}
-        action_id_by_action = {}
+        id_to_action = {}
+        action_to_id = {}
         i = 0
         for action in self.place_token_action_list:
-            action_list_by_id[i] = action
-            action_id_by_action[action] = i
+            id_to_action[i] = action
+            action_to_id[action] = i
             i += 1
 
         for action in self.move_token_action_list:
-            action_list_by_id[i] = action
-            action_id_by_action[action] = i
+            id_to_action[i] = action
+            action_to_id[action] = i
             i += 1
         
-        self.action_list_by_id = action_list_by_id
-        self.action_id_by_action = action_id_by_action
+        self.id_to_action = id_to_action
+        self.action_to_id = action_to_id
 
     def initialize_game(self):
         graph = nx.Graph()
@@ -101,12 +101,21 @@ class MarelleBoard():
 
     def play_action(self, action_id, player):
         if self.phase == "place":
-            self.place_token_action(self.action_list_by_id[action_id], player)
+            self.place_token_action(self.id_to_action[action_id], player)
             
         else:
-            self.move_token_action(self.action_list_by_id[action_id], player)
+            self.move_token_action(self.id_to_action[action_id], player)
         self.change_phase_if_needed()
         self.check_if_end(player)
+    
+    def get_legal_actions(self, player):
+        if self.phase == "place":
+            legal_actions = self.place_token_legal_actions(player)
+        
+        elif self.phase == "move":
+            legal_actions = self.move_token_legal_actions(player)
+
+        return legal_actions
     
     def get_legal_action_ids(self, player):
         legal_action_ids = []
@@ -118,7 +127,7 @@ class MarelleBoard():
             legal_actions = self.move_token_legal_actions(player)
         
         for action in legal_actions:
-            legal_action_ids.append(self.action_id_by_action[action])
+            legal_action_ids.append(self.action_to_id[action])
 
         return legal_action_ids
 
