@@ -89,8 +89,7 @@ class Agent(object):
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, adversaire)
             rewards.append(self.optimize_model(n_trajectories, adversaire))
             if (epoch+1)%5 == 0:
-                # print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
-                print(f'Episode {epoch + 1}/{n_epoch}: - Loss : {epoch_loss}')
+                print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
             
             if log_wandb:
                 wandb.log({f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}'})
