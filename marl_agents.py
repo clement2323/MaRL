@@ -224,7 +224,8 @@ class Reinforce(Agent):
         for index, weight in enumerate(self.model.parameters()):
             gradient, *_ = weight.grad.data
             gradient=torch.isfinite(gradient)
-            gradient=[g.detach() for g in gradient]
+            print(gradient)
+            gradient=np.array(gradient)
             if np.any(gradient) == False :
                 casse=True
             #print(f"Gradient of w{index} w.r.t to L: {gradient}")
