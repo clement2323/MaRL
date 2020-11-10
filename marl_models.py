@@ -16,7 +16,7 @@ class FCModel(nn.Module):
             nn.Linear(in_features=16, out_features=8),
             nn.ReLU(),
             nn.Linear(in_features=8, out_features=self.n_actions),
-            nn.Softmax(dim=0)
+            #nn.Softmax(dim=0)
         )
         
     def forward(self, state):
