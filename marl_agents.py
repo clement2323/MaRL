@@ -228,10 +228,9 @@ class BetterRandomAgent(Agent):
         pos_to_block = []
         for opponent_action in opponent_legal_actions:
             # Check positions we should block
-            _, pos = opponent_action
-            if pos != None:
+            pos, capture_pos = opponent_action
+            if capture_pos != None:
                 pos_to_block.append(pos)
-
         blocker_action = None
         for action in legal_actions:
             # Check if possible to capture

@@ -1,6 +1,7 @@
 import networkx as nx
 import gym
 from gym import spaces
+from IPython.display import clear_output
 
 class MarelleGymEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -336,3 +337,78 @@ class MarelleBoard():
             return -1
 
         return 1
+    
+class MarelleGame():
+    def __init__(self, env, player1, player2, clear_output):
+        self.env = env
+        self.players = {1: player1, -1: player2}
+        self.player_names = {}
+        if player1 == "human":
+            self.player_names[1] = "human 1"
+        else:
+            self.player_names[1] = player1.__class__.__name__ + " 1"
+        if player2 == "human":
+            self.player_names[-1] = "human 2"
+        else:
+            self.player_names[-1] = player1.__class__.__name__ + " 2"
+        
+        self.clear_output = clear_output
+
+        self.current_player = 1
+        self.action_count = 0
+        self.action_history = []
+    
+    def play(self):
+        while True:
+            if self.clear_output:
+                clear_output()
+            self.env.render()
+            interrupt = self.step()
+            if interrupt == True:
+                print("Game interrupted, run MarelleGame.play() to continue")
+                return self.action_history
+            if self.env.board.check_if_end(self.current_player) != 0:
+                self.env.render()
+                print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                return self.action_history
+            
+            self.current_player *= -1
+        
+        return self.action_history
+
+    def reset(self):
+        self.env.board = MarelleBoard()
+        self.current_player = 1
+        self.action_count = 0
+        self.action_history = []
+
+
+    def step(self):
+        if self.players[self.current_player] == "human":
+            
+            legal_actions = self.env.board.get_legal_actions(self.current_player)
+            legal_action_ids = self.env.board.get_legal_action_ids(self.current_player)
+
+            print("Legal moves :")
+            for i in range(len(legal_action_ids)):
+                print(f"{legal_action_ids[i]} : {legal_actions[i]}")
+            
+            try:
+                action_id = int(input(f"{self.player_names[self.current_player]} to act :"))
+            except ValueError:
+                print("Incorrect action input type, please enter an int")
+                return True
+            
+            if action_id not in legal_action_ids:
+                print("input is illegal action id")
+                return True
+
+        else:
+            action_id = self.players[self.current_player].learned_act(self.env.board.get_state())
+
+        self.env.board.play_action(action_id, self.current_player)
+        self.action_count += 1
+        self.action_history.append(action_id)
+        return False
+            
+
