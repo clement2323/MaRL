@@ -136,3 +136,12 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# wandb
+/wandb
+
+# mac os
+.DS_Store
+
+# local files clem
+/clement

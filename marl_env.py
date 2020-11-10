@@ -1,4 +1,57 @@
 import networkx as nx
+import gym
+from gym import spaces
+from IPython.display import clear_output
+from termcolor import colored
+
+class MarelleGymEnv(gym.Env):
+    """Custom Environment that follows gym interface"""
+    metadata = {'render.modes': ['human']}
+    def __init__(self):
+        super(MarelleGymEnv, self).__init__()    
+    
+    # Define action and observation space
+    # They must be gym.spaces objects
+        self.board = MarelleBoard()
+        self.action_space = spaces.Discrete(len(self.board.id_to_action))    # Example for using image as input:
+        self.observation_space = spaces.Discrete(len(self.board.get_state()))
+        self.list_move = []
+        self.current_player = 1
+        
+    def step(self, action): 
+   
+        self.board.play_action(action,self.current_player)
+
+        observation=self.board.get_state()
+        done = self.board.check_if_end(self.current_player) != 0
+        reward = {}
+        reward["game_end"] = self.board.check_if_end(self.current_player) * self.current_player # equal to 1 or 0
+        
+        _, opponent_pos = self.board.id_to_action[action]
+        if opponent_pos != None:
+            reward["capture_token"] = 1
+        else:
+            reward["capture_token"] = 0
+
+        self.list_move.append(action)
+        info = ""
+        self.current_player = self.board.get_opponent(self.current_player)
+
+        return observation, reward, done, info
+    
+    # Execute one time step within the environment
+  
+    def reset(self):
+        self.current_player = 1
+        self.list_move = []
+        self.board.initialize_game()
+
+        return self.board.get_state()
+    # Reset
+
+    def render(self, action_highlight=None, mode='human', close=False):
+        self.board.print_board(action_highlight)
+
 
 class MarelleBoard():
     '''
@@ -68,15 +121,45 @@ class MarelleBoard():
         self.players[1]["tokens_on_board"] = 0
         self.players[-1]["tokens_on_board"] = 0
 
+    def color_value(self, player, position, highlight_positions):
+        if player == 1:
+            color = "red"
+        elif player == 2:
+            color = "blue"
+        else:
+            color = "white"
+        
+        if position in highlight_positions:
+            return colored(player, color=color, on_color="on_yellow")
+        
+        else:
+            return colored(player, color=color)
 
 
-    def print_board(self):
+    def print_board(self, action_highlight=None):        
+        action_positions = []
+
+        if action_highlight != None:
+            action_position, action_capture = action_highlight
+
+            a, b = action_position
+            # if move type = action
+            if type(a) is tuple:
+                action_positions.append(a)
+                action_positions.append(b)
+            else:
+                action_positions.append((a, b))
+            
+            action_positions.append(action_capture)
+
         v = {}
         for node in self.graph.nodes:
-            if self.graph.nodes[node]["state"] == -1:
-                v[node] = 2
+            if self.graph.nodes[node]["state"] == 1:
+                v[node] = self.color_value(1, node, action_positions)
+            elif self.graph.nodes[node]["state"] == -1:
+                v[node] = self.color_value(2, node, action_positions)
             else:
-                v[node] = self.graph.nodes[node]["state"]
+                v[node] = self.color_value(0, node, action_positions)
 
 
         board_grid = f"""
@@ -285,3 +368,88 @@ class MarelleBoard():
             return -1
 
         return 1
+    
+class MarelleGame():
+    def __init__(self, env, player1, player2, clear_output):
+        self.env = env
+        self.players = {1: player1, -1: player2}
+        self.player_names = {}
+        if player1 == "human":
+            self.player_names[1] = "human 1"
+        else:
+            self.player_names[1] = player1.__class__.__name__ + " 1"
+        if player2 == "human":
+            self.player_names[-1] = "human 2"
+        else:
+            self.player_names[-1] = player1.__class__.__name__ + " 2"
+        
+        self.clear_output = clear_output
+
+        self.current_player = 1
+        self.action_count = 0
+        self.action_history = []
+    
+    def play(self):
+        while True:
+            if self.clear_output:
+                clear_output()
+            
+            # Don't highlight actions for the first move
+            if self.action_count > 0:
+                action_highlight = self.env.board.id_to_action[self.action_history[-1]]
+            else:
+                action_highlight = None
+
+            print(f"{self.player_names[self.current_player]}'s turn to play :")
+            self.env.render(action_highlight=action_highlight)
+
+            interrupt = self.step()
+            
+            if interrupt == True:
+                print("Game interrupted, run MarelleGame.play() to continue")
+                return self.action_history
+            if self.env.board.check_if_end(self.current_player) != 0:
+                self.env.render()
+                print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                return self.action_history
+            
+            self.current_player *= -1
+        
+        return self.action_history
+
+    def reset(self):
+        self.env.board = MarelleBoard()
+        self.current_player = 1
+        self.action_count = 0
+        self.action_history = []
+
+
+    def step(self):
+        if self.players[self.current_player] == "human":
+            
+            legal_actions = self.env.board.get_legal_actions(self.current_player)
+            legal_action_ids = self.env.board.get_legal_action_ids(self.current_player)
+
+            print("Legal moves :")
+            for i in range(len(legal_action_ids)):
+                print(f"{legal_action_ids[i]} : {legal_actions[i]}")
+            
+            try:
+                action_id = int(input(f"{self.player_names[self.current_player]} to act :"))
+            except ValueError:
+                print("Incorrect action input type, please enter an int")
+                return True
+            
+            if action_id not in legal_action_ids:
+                print("input is illegal action id")
+                return True
+
+        else:
+            action_id = self.players[self.current_player].learned_act(self.env.board.get_state())
+
+        self.env.board.play_action(action_id, self.current_player)
+        self.action_count += 1
+        self.action_history.append(action_id)
+        return False
+            
+
