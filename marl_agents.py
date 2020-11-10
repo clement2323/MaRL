@@ -198,10 +198,10 @@ class Reinforce(Agent):
         
         loss=0
         
-        print("vecteur sum prob pour chaque trajectoire")
-        t_s_p=np.array([l.detach() for l in list_sum_proba])
-        print("max",np.max(t_s_p))
-        print("min",np.min(t_s_p))
+        #print("vecteur sum prob pour chaque trajectoire")
+        #t_s_p=np.array([l.detach() for l in list_sum_proba])
+        #print("max",np.max(t_s_p))
+        #print("min",np.min(t_s_p))
         
         for i in range(len(list_sum_proba)):
             loss+=-list_sum_proba[i]*reward_trajectories[i]
@@ -224,7 +224,7 @@ class Reinforce(Agent):
         for index, weight in enumerate(self.model.parameters()):
             gradient, *_ = weight.grad.data
             gradient=torch.isfinite(gradient)
-            print(gradient)
+            #print(gradient)
             gradient=np.array(gradient)
             if np.any(gradient) == False :
                 casse=True
