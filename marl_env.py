@@ -192,6 +192,8 @@ class MarelleBoard():
         self.check_if_end(player)
     
     def get_legal_actions(self, player):
+        legal_actions = []
+
         if self.phase == "place":
             legal_actions = self.place_token_legal_actions(player)
         
@@ -201,6 +203,7 @@ class MarelleBoard():
         return legal_actions
     
     def get_legal_action_ids(self, player):
+        legal_actions = []
         legal_action_ids = []
 
         if self.phase == "place":
@@ -355,10 +358,11 @@ class MarelleBoard():
 
         opponent = self.get_opponent(player)
         if self.players[opponent]["tokens_on_board"] <= 2:
-            self.phase = "end"
+            self.phase = "end-capture"
             return player
         
         if len(self.get_legal_action_ids(opponent)) == 0:
+            self.phase = "end-block"
             return player
 
         return 0
@@ -370,7 +374,7 @@ class MarelleBoard():
         return 1
     
 class MarelleGame():
-    def __init__(self, env, player1, player2, clear_output):
+    def __init__(self, env, player1, player2):
         self.env = env
         self.players = {1: player1, -1: player2}
         self.player_names = {}
@@ -381,27 +385,26 @@ class MarelleGame():
         if player2 == "human":
             self.player_names[-1] = "human 2"
         else:
-            self.player_names[-1] = player1.__class__.__name__ + " 2"
+            self.player_names[-1] = player2.__class__.__name__ + " 2"
         
-        self.clear_output = clear_output
-
         self.current_player = 1
         self.action_count = 0
         self.action_history = []
     
-    def play(self):
+    def play(self, print_board=True, clear_print_outputs=True):
         while True:
-            if self.clear_output:
+            if clear_print_outputs:
                 clear_output()
-            
-            # Don't highlight actions for the first move
-            if self.action_count > 0:
-                action_highlight = self.env.board.id_to_action[self.action_history[-1]]
-            else:
-                action_highlight = None
 
-            print(f"{self.player_names[self.current_player]}'s turn to play :")
-            self.env.render(action_highlight=action_highlight)
+            if print_board:     
+                # Don't highlight actions for the first move
+                if self.action_count > 0:
+                    action_highlight = self.env.board.id_to_action[self.action_history[-1]]
+                else:
+                    action_highlight = None
+
+                print(f"{self.player_names[self.current_player]}'s turn to play :")
+                self.env.render(action_highlight=action_highlight)
 
             interrupt = self.step()
             
@@ -409,8 +412,9 @@ class MarelleGame():
                 print("Game interrupted, run MarelleGame.play() to continue")
                 return self.action_history
             if self.env.board.check_if_end(self.current_player) != 0:
-                self.env.render()
-                print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                if print_board:
+                    self.env.render()
+                    print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
                 return self.action_history
             
             self.current_player *= -1
@@ -451,5 +455,72 @@ class MarelleGame():
         self.action_count += 1
         self.action_history.append(action_id)
         return False
+    
+    def evaluate(self, n_games, player_id):
+        if self.players[1] == "human" or self.players[-1] == "human":
+            raise Exception('Cannot evaluate humans, they are too slow')
+        
+        evaluation = {
+            "n_actions":  0,
+            "n_captures_place":  0,
+            "n_captured_place":  0,
+            "n_captures_move":  0,
+            "n_captured_move":  0,
+            "draws_%":  0,
+            "victories_capture_%":  0,
+            "victories_block_%":  0,
+            "defeats_capture_%":  0,         
+            "defeats_block_%":  0        
+        }
+        
+        for i in range(n_games):
+            self.reset()
+            game_history = self.play(print_board=False, clear_print_outputs=False)
+
+            current_player = 1
+            board = MarelleBoard()
+
+            n_actions = 0
+            for action_id in game_history:
+                n_actions += 1
+                token, capture = board.id_to_action[action_id]
+                if capture != None:
+                    if current_player == player_id:
+                        evaluation["n_captures_" + board.phase] += 1
+                    else:
+                        evaluation["n_captured_" + board.phase] += 1
+            
+
+                board.play_action(action_id, current_player)
+
+                winner = board.check_if_end(current_player)
+                if winner != 0:
+                    if winner == player_id:
+                        victory_string = "victories"
+                    else:
+                        victory_string = "defeats"
+                    if board.phase == "end-capture":
+                        victory_type = "capture"
+                    elif board.phase == "end-block":
+                        victory_type = "block"
+                    
+                    evaluation[f"{victory_string}_{victory_type}_%"] += 1
+                    break
+                
+                if n_actions > 250:
+                    evaluation["draws_%"] += 1
+                    break
+
+                current_player *= -1
+            
+            evaluation["n_actions"] += n_actions
+            
+        for key in evaluation:
+            evaluation[key] /= n_games
+
+        return evaluation
+
+        
+
             
 
