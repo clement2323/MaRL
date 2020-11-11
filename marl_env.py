@@ -3,6 +3,7 @@ import gym
 from gym import spaces
 from IPython.display import clear_output
 from termcolor import colored
+import numpy as np
 
 class MarelleGymEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -21,7 +22,7 @@ class MarelleGymEnv(gym.Env):
     def step(self, action): 
    
         self.board.play_action(action,self.current_player)
-
+        
         observation=self.board.get_state()
         done = self.board.check_if_end(self.current_player) != 0
         reward = {}
@@ -32,7 +33,15 @@ class MarelleGymEnv(gym.Env):
             reward["capture_token"] = 1
         else:
             reward["capture_token"] = 0
-
+        
+        if self.board.phase == 'move': #good si tu captures beaucoup tu as plus de jeton 
+            reward["end_place_phase"] = np.sum(self.board.get_state())
+        else:
+            reward["end_place_phase"] = 0
+            
+        
+        
+        
         self.list_move.append(action)
         info = ""
         self.current_player = self.board.get_opponent(self.current_player)
