@@ -1,3 +1,5 @@
+from marl_evaluations import evaluate
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F 
@@ -74,7 +76,7 @@ class Agent(object):
         
         raise NotImplementedError
     
-    def train(self, n_trajectories, n_epoch, adversaire, log_wandb=False, save_model_freq = 50):
+    def train(self, n_trajectories, n_epoch, opponent_agent, evaluation_agent, log_wandb=False, save_model_freq = 50, evaluate_freq = 25):
         """Training method
 
         Parameters
@@ -87,15 +89,29 @@ class Agent(object):
         """
         rewards = []
         for epoch in range(n_epoch):
-            epoch_reward, epoch_loss = self.optimize_model(n_trajectories)
+            epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
             rewards.append(epoch_reward)
-            if (epoch+1)%save_model_freq == 0:
+            if (epoch+1) % 5 == 0:
                 print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
             
+            if (epoch+1) % evaluate_freq == 0:
+                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+                    # print(dict(enumerate(evaluation)))
+                    print(evaluation)
+            
             if log_wandb:
-                wandb.log({"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss})
+                wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss}
+                
+                if (epoch+1) % evaluate_freq == 0:
+                    for key in evaluation:
+                        wandb_log[key] = evaluation[key]
+                
+                wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
                     torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))
+
+                
+                    
 
         if log_wandb:    
             torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, 'model_final.pt'))
@@ -239,6 +255,7 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
         self.n_action = 566
         
     def learned_act(self, s): #checker legal move + argmax
+        s = torch.tensor(s, dtype=torch.float32)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
         #print(legal_moves)
         s=torch.tensor(s,dtype=torch.float)
@@ -358,8 +375,6 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
             print("explosion, go à l'époque suivante")
         else:
             self.optimizer.step()
-        
-        
             
         return reward_trajectories, loss
 
