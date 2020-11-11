@@ -1,3 +1,5 @@
+from marl_evaluations import evaluate
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F 
@@ -74,7 +76,7 @@ class Agent(object):
         
         raise NotImplementedError
     
-    def train(self, n_trajectories, n_epoch, adversaire, log_wandb=False, save_model_freq = 50):
+    def train(self, n_trajectories, n_epoch, opponent_agent, evaluation_agent, log_wandb=False, save_model_freq = 50, evaluate_freq = 25):
         """Training method
 
         Parameters
@@ -87,15 +89,29 @@ class Agent(object):
         """
         rewards = []
         for epoch in range(n_epoch):
-            epoch_reward, epoch_loss = self.optimize_model(n_trajectories, adversaire)
+            epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
             rewards.append(epoch_reward)
-            if (epoch+1)%save_model_freq == 0:
+            if (epoch+1) % 5 == 0:
                 print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
             
+            if (epoch+1) % evaluate_freq == 0:
+                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+                    # print(dict(enumerate(evaluation)))
+                    print(evaluation)
+            
             if log_wandb:
-                wandb.log({"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss})
+                wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss}
+                
+                if (epoch+1) % evaluate_freq == 0:
+                    for key in evaluation:
+                        wandb_log[key] = evaluation[key]
+                
+                wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
                     torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))
+
+                
+                    
 
         if log_wandb:    
             torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, 'model_final.pt'))
@@ -125,6 +141,7 @@ class Reinforce(Agent):
         self.optimizer = torch.optim.Adam(self.model.net.parameters(), lr=lr)
         
     def learned_act(self, s): #checker legal move + argmax
+        s = torch.tensor(s, dtype=torch.float32)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
         t_all_moves=np.array(self.model(s).detach())
         t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
@@ -198,10 +215,10 @@ class Reinforce(Agent):
         
         loss=0
         
-        print("vecteur sum prob pour chaque trajectoire")
+        # print("vecteur sum prob pour chaque trajectoire")
         t_s_p=np.array([l.detach() for l in list_sum_proba])
-        print("max",np.max(t_s_p))
-        print("min",np.min(t_s_p))
+        # print("max",np.max(t_s_p))
+        # print("min",np.min(t_s_p))
         
         for i in range(len(list_sum_proba)):
             loss+=-list_sum_proba[i]*reward_trajectories[i]
@@ -224,7 +241,7 @@ class Reinforce(Agent):
         for index, weight in enumerate(self.model.parameters()):
             gradient, *_ = weight.grad.data
             gradient=torch.isfinite(gradient)
-            print(gradient)
+            # print(gradient)
             gradient=np.array(gradient)
             if np.any(gradient) == False :
                 casse=True
@@ -236,8 +253,6 @@ class Reinforce(Agent):
             print("explosion, go à l'époque suivante")
         else:
             self.optimizer.step()
-        
-        
             
         return reward_trajectories, loss
 
