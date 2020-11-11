@@ -13,9 +13,6 @@ class MarelleGymEnv(gym.Env):
     # Define action and observation space
     # They must be gym.spaces objects
         self.board = MarelleBoard()
-        self.action_space = spaces.Discrete(len(self.board.id_to_action))    # Example for using image as input:
-        self.observation_space = spaces.Discrete(len(self.board.get_state()))
-        self.list_move = []
         self.current_player = 1
         
     def step(self, action): 
@@ -33,7 +30,6 @@ class MarelleGymEnv(gym.Env):
         else:
             reward["capture_token"] = 0
 
-        self.list_move.append(action)
         info = ""
         self.current_player = self.board.get_opponent(self.current_player)
 
@@ -43,7 +39,6 @@ class MarelleGymEnv(gym.Env):
   
     def reset(self):
         self.current_player = 1
-        self.list_move = []
         self.board.initialize_game()
 
         return self.board.get_state()
@@ -392,6 +387,7 @@ class MarelleGame():
         self.action_history = []
     
     def play(self, print_board=True, clear_print_outputs=True):
+        self.reset()
         while True:
             if clear_print_outputs:
                 clear_output()
@@ -422,7 +418,7 @@ class MarelleGame():
         return self.action_history
 
     def reset(self):
-        self.env.board = MarelleBoard()
+        self.env.reset()
         self.current_player = 1
         self.action_count = 0
         self.action_history = []
