@@ -76,17 +76,17 @@ class ReinforceAgent(MarelleAgent):
             if (epoch+1) % 5 == 0:
                 print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
-            #if (epoch+1) % evaluate_freq == 0:
-                    #evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
-                    # print(dict(enumerate(evaluation)))
-                    #print(evaluation)
+            if (epoch+1) % evaluate_freq == 0:
+                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+                    print(dict(enumerate(evaluation)))
+                    print(evaluation)
             
             if log_wandb:
                 wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(epoch_reward), 2), "+/-": round(np.std(epoch_reward), 2), "loss": epoch_loss}
                 
-               # if (epoch+1) % evaluate_freq == 0:
-                #    for key in evaluation:
-                 #       wandb_log[key] = evaluation[key]
+               if (epoch+1) % evaluate_freq == 0:
+                   for key in evaluation:
+                       wandb_log[key] = evaluation[key]
                 
                 wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
