@@ -11,70 +11,51 @@ import seaborn as sns
 import wandb
 import os
 
-class Agent(object):
-    def __init__(self, env, player_id, epsilon=0):
-        self.epsilon = epsilon
+class MarelleAgent(object):
+    '''
+    A basic marelle agent class for both RL and non RL AIs
+    '''
+    def __init__(self, env, player_id):
         self.env = env
-        self.n_action = len(self.env.board.id_to_action)
-        self.gamma = 1
+        self.n_actions = len(self.env.board.id_to_action)
+        self.place_actions = 24 # 24 positions
+        self.place_capture_actions = 24 # (23 captures + 1 non capture)
+        self.n_total_place_actions = self.place_actions * self.place_capture_actions
+        self.move_actions = 36 # 36 edges
+        self.move_capture_actions = 25 # (24 captures + 1 non capture)
+        self.n_total_move_actions = self.move_actions * self.move_capture_actions
         self.player_id = player_id
-        
-    def set_epsilon(self,e):
-        self.epsilon = e
+
+    def act(self):
+        return self.learned_act()
+
+    def learned_act():
+        pass
+  
+
+class ReinforceAgent(MarelleAgent):
+    ''' This class encapsulates all agents that perform reinforcement training'''
+    def __init__(self, env, player_id, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+        super(ReinforceAgent, self).__init__(env, player_id)
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.win_reward = win_reward
+        self.defeat_reward = defeat_reward
+        self.capture_reward = capture_reward
+        self.capture_reward = captured_reward
 
     def act(self,s,train=True):
         """ This function should return the next action to do:
         an integer between 0 and 4 (not included) with a random exploration of epsilon"""
         if train:
             if np.random.rand() <= self.epsilon:
-                a = np.random.randint(0, self.n_action, size=1)[0]
+                a = np.random.randint(0, self.n_actions, size=1)[0]
             else:
                 a = self.learned_act(s)
         else: # in some cases, this can improve the performance.. remove it if poor performances
             a = self.learned_act(s)
 
         return a
-
-    def learned_act(self,s):
-        """ Act via the policy of the agent, from a given state s
-        it proposes an action a"""
-        pass
-
-    
-    def _compute_returns(self, rewards):
-        """Returns the cumulative discounted rewards at each time step
-        
-        Parameters
-        ----------
-        rewards : array
-            The array of rewards of one episode
-
-        Returns
-        -------
-        array
-            The cumulative discounted rewards at each time step
-            
-        Example
-        -------
-        for rewards=[1, 2, 3] this method outputs [1 + 2 * gamma + 3 * gamma**2, 2 + 3 * gamma, 3] 
-        """
-        raise NotImplementedError
-        
-    def optimize_model(self, n_trajectories, adversaire):
-        """Perform a gradient update using n_trajectories
-
-        Parameters
-        ----------
-        n_trajectories : int
-            The number of trajectories used to approximate the expectation card(D) in the formula above
-
-        Returns
-        -------
-        array
-            The cumulative discounted rewards of each trajectory
-        """
-        
-        raise NotImplementedError
     
     def train(self, n_trajectories, n_epoch, opponent_agent, evaluation_agent, log_wandb=False, save_model_freq = 50, evaluate_freq = 25):
         """Training method
@@ -108,10 +89,7 @@ class Agent(object):
                 
                 wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
-                    torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))
-
-                
-                    
+                    torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, f'model_{epoch + 1}_{n_epoch}.pt'))    
 
         if log_wandb:    
             torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, 'model_final.pt'))
@@ -119,7 +97,36 @@ class Agent(object):
         # Plotting
         r = pd.DataFrame((itertools.chain(*(itertools.product([i], rewards[i]) for i in range(len(rewards))))), columns=['Epoch', 'Reward'])
         sns.lineplot(x="Epoch", y="Reward", data=r, ci='sd')
+   
+
+    def learned_act(self,s):
+        """ Act via the policy of the agent, from a given state s
+        it proposes an action a"""
+        raise NotImplementedError
+
     
+    def _compute_returns(self, rewards):
+
+        returns=0
+        for i in range(len(rewards)):
+            returns=self.gamma*returns+rewards[-(i+1)]
+        return(returns)
+        
+    def optimize_model(self, n_trajectories, adversaire):
+        """Perform a gradient update using n_trajectories
+
+        Parameters
+        ----------
+        n_trajectories : int
+            The number of trajectories used to approximate the expectation card(D) in the formula above
+
+        Returns
+        -------
+        array
+            The cumulative discounted rewards of each trajectory
+        """
+        
+        raise NotImplementedError 
     
     def save(self):
         """ This function returns basic stats if applicable: the
@@ -271,14 +278,7 @@ class Reinforce_cliff(): #servira pour les environnements  en tour par tour
         r = pd.DataFrame((itertools.chain(*(itertools.product([i], rewards[i]) for i in range(len(rewards))))), columns=['Epoch', 'Reward'])
         sns.lineplot(x="Epoch", y="Reward", data=r, ci='sd')
     
-
-
-
-
-    
-
-    
-    
+ 
 class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
     def __init__(self, env, player_id, model, lr, incentivize_captures=False, punish_opponent_captures=False):
         super(Reinforce_place, self).__init__(env, player_id, model)
@@ -427,16 +427,24 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
         return reward_trajectories, loss
 
 
-
-class Reinforce(Agent):
-    def __init__(self, env, player_id, model, lr, incentivize_captures=False, punish_opponent_captures=False, domain = None ):
-        super(Reinforce, self).__init__(env, player_id, model)
+class SingleModelReinforce(ReinforceAgent):
+    '''
+    An agent that uses a single model to select its action
+    '''
+    def __init__(self, env, player_id, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+        super(SingleModelReinforce, self).__init__(
+            env=env, 
+            player_id=player_id, 
+            epsilon=epsilon, 
+            gamma=gamma, 
+            win_reward=win_reward, 
+            defeat_reward=defeat_reward,
+            capture_reward=capture_reward, 
+            captured_reward=captured_reward
+        )
         self.lr = lr
         self.model = model
-        self.incentivize_captures = incentivize_captures
-        self.punish_opponent_captures = punish_opponent_captures
         self.optimizer = torch.optim.Adam(self.model.net.parameters(), lr=lr)
-        self.domain = domain
         
     def learned_act(self, s): #checker legal move + argmax
         s=torch.tensor(s,dtype=torch.float)
@@ -447,15 +455,8 @@ class Reinforce(Agent):
         action = legal_moves[argm]
 
         return(action) 
-        
-    def _compute_returns(self, rewards):
-        
-        returns=0
-        for i in range(len(rewards)):
-            returns=self.gamma*returns+rewards[-(i+1)]
-        return(returns)
                
-    def optimize_model(self, n_trajectories, adversaire): #adversaire on met dedans l'agent qui jouera contre
+    def optimize_model(self, n_trajectories, opponent):
       
         reward_trajectories=[]
         list_sum_proba=[]
@@ -470,8 +471,17 @@ class Reinforce(Agent):
             
             sum_lprob=0
             while not done:
-                
-                  
+                agent_reward = 0
+                if self.player_id == 2:
+                    #au tour de l'adversaire si l'adversaire commence
+                    action=opponent.act(state)
+                    state, reward, done, info = self.env.step(action)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
+                    
+                state=torch.tensor(state, dtype=torch.float)
+
+                # au tour de l'agent
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
                 t_all_moves=self.model(state)
                 t_legal_moves =torch.tensor([t_all_moves[legal_move] for legal_move in legal_moves])
@@ -483,7 +493,7 @@ class Reinforce(Agent):
                 action_id = int(torch.multinomial(t_legal_moves, 1))
                 action = legal_moves[action_id]
                 
-                #je choisi un legal move mais c'est la proba de l'action que je prends en espérant qu'elle ne vaille pas 0
+                #je choisis un legal move mais c'est la proba de l'action que je prends en espérant qu'elle ne vaille pas 0
                 proba=nn.Softmax(dim=0)(self.model(state))
                 sum_lprob+= proba[action].log()
                 #sum_lprob+= proba[action] #J AI ENLEVE LE LOG POUR EVITER LES DIVERGENCES TROP FORTES
@@ -491,25 +501,22 @@ class Reinforce(Agent):
                 
                 state, reward, done, info =self.env.step(action)
 
-                reward_p1 = reward["game_end"]
-                if self.incentivize_captures:
-                    reward_p1 += reward["capture_token"] * 0.1
-                       
-                #au tour de l'adversaire
-                if not done:
-                    action=adversaire.act(state)
+                agent_reward += reward["game_end"] * self.win_reward
+                agent_reward += reward["capture_token"] * self.capture_reward
+
+
+                # au tour de l'adversaire si agent commence
+                if self.player_id == 1:
+                    action=opponent.act(state)
                     state, reward, done, info = self.env.step(action)
-                    reward_p2 = reward["game_end"]
-                    if self.punish_opponent_captures:
-                        reward_p2 += reward["capture_token"] * 0.1
-                    rewards.append(reward_p1-reward_p2)
-                else : 
-                    rewards.append(reward_p1)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
                     
-                state=torch.tensor(state, dtype=torch.float)
+                       
+                
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
-            reward_trajectories.append(self._compute_returns(rewards))
+            reward_trajectories.append(self._compute_returns(agent_reward))
         
         loss=0
         
@@ -553,7 +560,7 @@ class Reinforce(Agent):
 
 
 
-class RandomAgent(Agent):
+class RandomAgent(MarelleAgent):
     def __init__(self, env, player_id):
         super(RandomAgent, self).__init__(env, player_id)
         pass
@@ -562,7 +569,7 @@ class RandomAgent(Agent):
         return(np.random.choice(self.env.board.get_legal_action_ids(self.player_id)))
 
 
-class BetterRandomAgent(Agent):
+class BetterRandomAgent(MarelleAgent):
     def __init__(self, env, player_id):
         super(BetterRandomAgent, self).__init__(env, player_id)
         pass

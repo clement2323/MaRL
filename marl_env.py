@@ -9,19 +9,23 @@ class MarelleGymEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
     def __init__(self):
-        super(MarelleGymEnv, self).__init__()    
+        super(MarelleGymEnv, self).__init__(end_after_place_phase=False)    
     
     # Define action and observation space
     # They must be gym.spaces objects
         self.board = MarelleBoard()
         self.current_player = 1
+        self.end_after_place_phase = end_after_place_phase
         
     def step(self, action): 
    
         self.board.play_action(action,self.current_player)
         
         observation=self.board.get_state()
-        done = self.board.check_if_end(self.current_player) != 0
+        if self.end_after_place_phase:
+            done = self.board.phase != "place"
+        else:
+            done = self.board.check_if_end(self.current_player) != 0
         reward = {}
         reward["game_end"] = self.board.check_if_end(self.current_player) * self.current_player # equal to 1 or 0
         
@@ -30,11 +34,6 @@ class MarelleGymEnv(gym.Env):
             reward["capture_token"] = 1
         else:
             reward["capture_token"] = 0
-        
-        if self.board.phase == 'move': #good si tu captures beaucoup tu as plus de jeton 
-            reward["end_place_phase"] = np.sum(self.board.get_state())*self.current_player
-        else:
-            reward["end_place_phase"] = 0
             
         info = ""
         self.current_player = self.board.get_opponent(self.current_player)
@@ -430,7 +429,12 @@ class MarelleGame():
         self.action_history = []
 
 
-    def step(self):
+    def step(self) -> bool, bool:
+        '''
+        Returns game_interruption(bool), game_finished(bool)
+        '''
+        game_interrupted = False
+        game_finished = False
         if self.players[self.current_player] == "human":
             
             legal_actions = self.env.board.get_legal_actions(self.current_player)
@@ -444,23 +448,25 @@ class MarelleGame():
                 action_id = int(input(f"{self.player_names[self.current_player]} to act :"))
             except ValueError:
                 print("Incorrect action input type, please enter an int")
-                return True
+                game_interrupted = True
+                return True, False
             
             if action_id not in legal_action_ids:
                 print("input is illegal action id")
-                return True
+                game_interrupted = True
+                return True, False
 
         else:
             action_id = self.players[self.current_player].learned_act(self.env.board.get_state())
 
-        self.env.board.play_action(action_id, self.current_player)
+        observation, reward, done, info = self.env.step(action_id)
         self.action_count += 1
         self.action_history.append(action_id)
-        return False
+        return False, done
     
     def evaluate(self, n_games, player_id):
         if self.players[1] == "human" or self.players[-1] == "human":
-            raise Exception('Cannot evaluate humans, they are too slow')
+            raise Exception('Cannot evaluate humans, they are too slow of a specie')
         
         evaluation = {
             "n_actions":  0,
