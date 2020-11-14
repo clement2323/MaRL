@@ -511,12 +511,12 @@ class SingleModelReinforce(ReinforceAgent):
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
-                    
-                       
+
+                rewards.append(agent_reward)
                 
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
-            reward_trajectories.append(self._compute_returns(agent_reward))
+            reward_trajectories.append(self._compute_returns(rewards))
         
         loss=0
         
