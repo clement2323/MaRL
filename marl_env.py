@@ -32,7 +32,7 @@ class MarelleGymEnv(gym.Env):
             reward["capture_token"] = 0
         
         if self.board.phase == 'move': #good si tu captures beaucoup tu as plus de jeton 
-            reward["end_place_phase"] = np.sum(self.board.get_state())
+            reward["end_place_phase"] = np.sum(self.board.get_state())*self.current_player
         else:
             reward["end_place_phase"] = 0
             

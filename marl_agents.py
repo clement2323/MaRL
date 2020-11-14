@@ -90,21 +90,21 @@ class Agent(object):
         rewards = []
         for epoch in range(n_epoch):
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
-            rewards.append(epoch_reward)
+            rewards.append(np.mean(epoch_reward))
             if (epoch+1) % 5 == 0:
-                print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(rewards[-1]), 2)} +/- {round(np.std(rewards[-1]), 2)} - Loss : {epoch_loss}')
+                print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
-            if (epoch+1) % evaluate_freq == 0:
-                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+            #if (epoch+1) % evaluate_freq == 0:
+                    #evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
                     # print(dict(enumerate(evaluation)))
-                    print(evaluation)
+                    #print(evaluation)
             
             if log_wandb:
-                wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(rewards[-1]), 2), "+/-": round(np.std(rewards[-1]), 2), "loss": epoch_loss}
+                wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(epoch_reward), 2), "+/-": round(np.std(epoch_reward), 2), "loss": epoch_loss}
                 
-                if (epoch+1) % evaluate_freq == 0:
-                    for key in evaluation:
-                        wandb_log[key] = evaluation[key]
+               # if (epoch+1) % evaluate_freq == 0:
+                #    for key in evaluation:
+                 #       wandb_log[key] = evaluation[key]
                 
                 wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
@@ -138,7 +138,7 @@ class Reinforce_cliff(): #servira pour les environnements  en tour par tour
         self.gamma = 1
         self.lr = lr
         self.model = model
-        self.optimizer = torch.optim.Adam(self.model.net.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.n_action = self.env.Na
 
         
@@ -166,31 +166,67 @@ class Reinforce_cliff(): #servira pour les environnements  en tour par tour
         for i in range(n_trajectories):
             done = False
             rewards=[]
-            
+            #print("trajectoire", i)
             state=self.env.reset()
             state=torch.tensor(state, dtype=torch.float)
             prev_state = state
             sum_lprob=0
+            compteur_step=0
             
             while not done:
                 
-                proba=nn.Softmax(dim=0)(self.model(torch.tensor([prev_state,state],dtype = torch.float)))
+                proba=nn.Softmax(dim=0)(self.model(torch.tensor([state,state],dtype = torch.float)))
                 
+                    #Potentiellement le réseau est trop nazi sur une action donc on le force ailleurss
+                #if np.random.rand() <= 0.9:
                 action=int(torch.multinomial(proba, 1))
-                sum_lprob+= proba[action].log()     
+                sum_lprob+= proba[action].log() 
+                #else :
+                 #   action=np.random.randint(0,4)
+                    
+                    
                 prev_state = state
                 state, reward, done, info =self.env.step(action)
+                
+                #if state == 36 and prev_state == 47: temporalité du reward ?
+                if state == 47 and prev_state == 35:
+                    #print("End",state)
+                    done=True
+                    reward=1000
+                #    self.env.reset()
+                #else:
+                   
+                if state in [37,38,39,40,41,42,43,44,45,46]:
+                    done = True
+                if prev_state==state:
+                    done = True
+                 #   #reward= -10
+                  #  self.env.reset()
+
+                #if compteur_step==500:
+                 #           done =True
+                  #          reward= 0
+                   #         self.env.reset()
+                        #print("proba", proba) 
+                #print("new step")
+                #print("state :", state)
+                #print("action :", action)
+                #print("reward :", reward)
+                #print("done :", done)
+                #self.env.render()
                 rewards.append(reward)
                 state=torch.tensor(state, dtype=torch.float)
-            
+                compteur_step+=1
+                
             list_sum_proba.append(sum_lprob)
+            #print(np.sum(rewards))
             reward_trajectories.append(self._compute_returns(rewards))
         
         loss=0
         
       
         for i in range(len(list_sum_proba)):
-            loss+=-list_sum_proba[i]*reward_trajectories[i]
+            loss-=list_sum_proba[i]*reward_trajectories[i]
         
         loss=loss/len(list_sum_proba)
       
@@ -202,7 +238,7 @@ class Reinforce_cliff(): #servira pour les environnements  en tour par tour
        
         # Do the gradient descent step
         self.optimizer.step()
-        
+        #print(reward_trajectories)
         return reward_trajectories, loss
 
     def train(self, n_trajectories, n_epoch, adversaire, log_wandb=False, save_model_freq = 50):
@@ -244,14 +280,13 @@ class Reinforce_cliff(): #servira pour les environnements  en tour par tour
     
     
 class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
-    
     def __init__(self, env, player_id, model, lr, incentivize_captures=False, punish_opponent_captures=False):
         super(Reinforce_place, self).__init__(env, player_id, model)
         self.lr = lr
         self.model = model
         self.incentivize_captures = incentivize_captures
         self.punish_opponent_captures = punish_opponent_captures
-        self.optimizer = torch.optim.Adam(self.model.net.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.n_action = 566
         
     def learned_act(self, s): #checker legal move + argmax
@@ -293,14 +328,21 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
                 
                   
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                #print(legal_moves)
                 legal_moves = np.array(legal_moves)[np.array(legal_moves)<=565]
+                #print("legal_moves",legal_moves)
+                #print("legal_moves",legal_moves)
+                #print("done",done)
+                #self.env.board.print_board()
+                
                 
                 t_all_moves=self.model(state)
+                #print("proba mov",t_all_moves)
+                #print("size mov",t_all_moves.size())
                 t_legal_moves =torch.tensor([t_all_moves[legal_move] for legal_move in legal_moves])
                 
                 #softmax ici
                 t_legal_moves = nn.Softmax(dim=0)(t_legal_moves)
+                #print("probas !!!",t_legal_moves)
                 action_id = int(torch.multinomial(t_legal_moves, 1))
                 action = legal_moves[action_id]
                 
@@ -308,9 +350,11 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
                 proba=nn.Softmax(dim=0)(self.model(state))
                 sum_lprob+= proba[action].log()             
                 state, reward, done, info =self.env.step(action)
-                
+                #print(reward)
                 #done  = True if end of place
-                done = (self.env.board.phase=='move')
+                done = (self.env.board.phase!='place')
+                #done = (self.env.board.phase=='move')
+                #self.env.board.print_board()
                 
                 reward_p1 = reward["end_place_phase"]
                 if self.incentivize_captures:
@@ -320,19 +364,23 @@ class Reinforce_place(Agent):## refaire ça en changeant l'environnement ?
                 if not done:
                     action=adversaire.act(state)
                     state, reward, done, info = self.env.step(action)
-                    
+                    #self.env.board.print_board()
                     #done  = True if end of place
-                    done = (self.env.board.phase=='move')
+                    done = (self.env.board.phase!='place')
+                    #done = (self.env.board.phase=='move')
                     reward_p2 = reward["end_place_phase"]
                     if self.punish_opponent_captures:
                         reward_p2 += reward["capture_token"] * 0.1
                     rewards.append(reward_p1-reward_p2)
+                    #print(reward_p1)
+                    #print(reward_p2)
                 else : 
-                    rewards.append(reward_p1)
+                     rewards.append(reward_p1)
                     
                 state=torch.tensor(state, dtype=torch.float)
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
+            #print(self._compute_returns(rewards))
             reward_trajectories.append(self._compute_returns(rewards))
         
         loss=0
@@ -438,6 +486,7 @@ class Reinforce(Agent):
                 #je choisi un legal move mais c'est la proba de l'action que je prends en espérant qu'elle ne vaille pas 0
                 proba=nn.Softmax(dim=0)(self.model(state))
                 sum_lprob+= proba[action].log()
+                #sum_lprob+= proba[action] #J AI ENLEVE LE LOG POUR EVITER LES DIVERGENCES TROP FORTES
                 #print("proba",proba[action].log())
                 
                 state, reward, done, info =self.env.step(action)
