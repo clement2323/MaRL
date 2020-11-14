@@ -8,14 +8,19 @@ import numpy as np
 class MarelleGymEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self):
-        super(MarelleGymEnv, self).__init__(end_after_place_phase=False)    
-    
-    # Define action and observation space
-    # They must be gym.spaces objects
+    def __init__(self, end_after_place_phase=False):
+        super(MarelleGymEnv, self).__init__()    
         self.board = MarelleBoard()
         self.current_player = 1
         self.end_after_place_phase = end_after_place_phase
+        self.N_STATE = 24 # 24 positions
+        self.N_PLACE_ACTIONS = 24 # 24 positions
+        self.N_PLACE_CAPTURE_ACTIONS = 24 # 23 captures + 1 non capture
+        self.N_MOVE_ACTIONS = 36 # 36 edges
+        self.N_MOVE_CAPTURE_ACTIONS = 25 # 24 captures + 1 non capture
+        self.N_TOTAL_PLACE_ACTIONS = self.N_PLACE_ACTIONS * self.N_PLACE_CAPTURE_ACTIONS
+        self.N_TOTAL_MOVE_CAPTURE_ACTIONS = self.N_MOVE_ACTIONS * self.N_MOVE_CAPTURE_ACTIONS
+        self.N_TOTAL_ACTIONS = self.N_TOTAL_PLACE_ACTIONS + self.N_TOTAL_MOVE_CAPTURE_ACTIONS
         
     def step(self, action): 
    
@@ -429,7 +434,7 @@ class MarelleGame():
         self.action_history = []
 
 
-    def step(self) -> bool, bool:
+    def step(self) -> (bool, bool):
         '''
         Returns game_interruption(bool), game_finished(bool)
         '''

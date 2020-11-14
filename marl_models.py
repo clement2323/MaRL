@@ -29,15 +29,17 @@ class FCModel(nn.Module):
         
 class ConvModel(nn.Module):
     
-    
     def __init__(self,  n_actions):
         super(ConvModel, self).__init__()
         self.n_actions=n_actions
-        self.conv1 = nn.Conv2d(1, 20, kernel_size=3)
-        self.conv2 = nn.Conv2d(20, 40, kernel_size=3)
-        self.conv3 = nn.Conv2d(40, 40, kernel_size=3)
-        self.fc1 = nn.Linear(40, self.n_actions)
-    
+        
+        self.net = nn.Sequential(
+            nn.Conv2d(1, 20, kernel_size=3),
+            nn.Conv2d(20, 40, kernel_size=3),
+            nn.Conv2d(40, 40, kernel_size=3),
+            nn.Linear(40, self.n_actions)
+        )
+        
     def transform_input_to_mat(self,state):
         
         vec_s=np.array(state.detach())     
@@ -86,7 +88,7 @@ class ConvModel(nn.Module):
     def forward(self, x):   
         
         mat_x=self.transform_input_to_mat(x)
-        x=self.conv3(self.conv2(self.conv1(mat_x)))
+        x=self.net(mat_x)
         #print(x.shape[0]*x.shape[1]*x.shape[2])
         x = x.view(-1, 40)
         x= self.fc1(x)
