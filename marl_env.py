@@ -230,6 +230,7 @@ class MarelleBoard():
         return state
     
     def place_token_action(self, action, player):
+
         legal_moves = self.place_token_legal_actions(player)
 
         if action not in legal_moves:
@@ -265,11 +266,11 @@ class MarelleBoard():
         return legal_actions
     
     def move_token_action(self, action, player):
-        edge, opponent_token = action
         legal_moves = self.move_token_legal_actions(player)
         if action not in legal_moves:
             raise Exception('Illegal token move action')
 
+        edge, opponent_token = action
         a, b = edge
         if self.graph.nodes[a]["state"] == 0 and self.graph.nodes[b]["state"] == player:
             cur_node = b
@@ -412,12 +413,12 @@ class MarelleGame():
                 print(f"{self.player_names[self.current_player]}'s turn to play :")
                 self.env.render(action_highlight=action_highlight)
 
-            interrupt = self.step()
+            interrupt, done = self.step()
             
             if interrupt == True:
                 print("Game interrupted, run MarelleGame.play() to continue")
                 return self.action_history
-            if self.env.board.check_if_end(self.current_player) != 0:
+            if done and self.env.board.check_if_end(self.current_player) != 0:
                 if print_board:
                     self.env.render()
                     print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")

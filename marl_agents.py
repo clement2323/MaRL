@@ -73,8 +73,8 @@ class ReinforceAgent(MarelleAgent):
         for epoch in range(n_epoch):
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
             rewards.append(np.mean(epoch_reward))
-            if (epoch+1) % 5 == 0:
-                print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
+
+            print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
             if (epoch+1) % evaluate_freq == 0:
                     evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
@@ -156,7 +156,7 @@ class SingleModelReinforce(ReinforceAgent):
         )
         self.lr = lr
         self.model = model
-        self.optimizer = torch.optim.Adam(self.model.net.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         
     def learned_act(self, s): #checker legal move + argmax
         s=torch.tensor(s,dtype=torch.float)
