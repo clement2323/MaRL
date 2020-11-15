@@ -78,15 +78,14 @@ class ReinforceAgent(MarelleAgent):
             
             if (epoch+1) % evaluate_freq == 0:
                     evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
-                    print(dict(enumerate(evaluation)))
                     print(evaluation)
             
             if log_wandb:
                 wandb_log = {"episode": epoch + 1, "rewards" : round(np.mean(epoch_reward), 2), "+/-": round(np.std(epoch_reward), 2), "loss": epoch_loss}
                 
-               if (epoch+1) % evaluate_freq == 0:
-                   for key in evaluation:
-                       wandb_log[key] = evaluation[key]
+                if (epoch+1) % evaluate_freq == 0:
+                    for key in evaluation:
+                        wandb_log[key] = evaluation[key]
                 
                 wandb.log(wandb_log)
                 if (epoch+1) % save_model_freq == 0:
@@ -96,8 +95,7 @@ class ReinforceAgent(MarelleAgent):
             torch.save(self.model.state_dict(), os.path.join(wandb.run.dir, 'model_final.pt'))
 
         # Plotting
-        print(rewards)
-        r = pd.DataFrame((itertools.chain(*(itertools.product([i], rewards[i]) for i in range(len(rewards))))), columns=['Epoch', 'Reward'])
+        r = pd.DataFrame((itertools.chain(*(itertools.product([i], [rewards[i]]) for i in range(len(rewards))))), columns=['Epoch', 'Reward'])
         sns.lineplot(x="Epoch", y="Reward", data=r, ci='sd')
    
 
