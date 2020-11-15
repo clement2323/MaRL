@@ -272,7 +272,144 @@ class SingleModelReinforce(ReinforceAgent):
         return reward_trajectories, loss
 
 
+class SingleModelReinforce(ReinforceAgent):
+    '''
+    An agent that uses a single model to select its action
+    '''
+    def __init__(self, env, player_id, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+        super(SingleModelReinforce, self).__init__(
+            env=env, 
+            player_id=player_id, 
+            epsilon=epsilon, 
+            gamma=gamma, 
+            win_reward=win_reward, 
+            defeat_reward=defeat_reward,
+            capture_reward=capture_reward, 
+            captured_reward=captured_reward,
+            models=[model]
+        )
+        self.lr = lr
+        self.model = model
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        
+    def learned_act(self, s): #checker legal move + argmax
+        s=torch.tensor(s,dtype=torch.float)
+        legal_moves = self.env.board.get_legal_action_ids(self.player_id)
+        t_all_moves=np.array(self.model(s).detach())
+        t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
+        argm = np.argmax(t_legal_moves)
+        action = legal_moves[argm]
 
+        return(action) 
+               
+    def optimize_model(self, n_trajectories, opponent:MarelleAgent):
+      
+        reward_trajectories=[]
+        list_sum_proba=[]
+        
+        #Here I compute n_trajectories trajectories in order to calculate the MonteCarlo estimate of the J function
+        for i in range(n_trajectories):
+            done = False
+            rewards=[]
+
+            state=self.env.reset()
+            state=torch.tensor(state, dtype=torch.float)
+            
+            sum_lprob=0
+            while not done:
+                agent_reward = 0
+                if self.player_id == 2:
+                    #au tour de l'adversaire si l'adversaire commence
+                    action=opponent.act(state)
+                    state, reward, done, info = self.env.step(action)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
+
+                    if done:
+                        break
+                    
+                state=torch.tensor(state, dtype=torch.float)
+
+                # au tour de l'agent
+                legal_moves = self.env.board.get_legal_action_ids(self.player_id)
+                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
+                t_all_moves = self.model(state)
+
+                t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
+                
+                # Softmax on legal moves
+                t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+
+                proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                action_id = legal_moves[proba_id]
+                
+                # La proba est la proba du softmax des legal moves
+                lprob = t_legal_moves_probas[proba_id].log()
+                sum_lprob+= lprob
+                
+                state, reward, done, info =self.env.step(action_id)
+
+                agent_reward += reward["game_end"] * self.win_reward
+                agent_reward += reward["capture_token"] * self.capture_reward
+
+
+                # au tour de l'adversaire si agent commence
+                if self.player_id == 1 and not done:
+                    action = opponent.act(state)
+                    state, reward, done, info = self.env.step(action)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
+
+                rewards.append(agent_reward)
+            #print("sumlprob",sum_lprob)
+            list_sum_proba.append(sum_lprob)
+            reward_trajectories.append(self._compute_returns(rewards))
+        
+        loss=0
+        
+        #print("vecteur sum prob pour chaque trajectoire")
+        #t_s_p=np.array([l.detach() for l in list_sum_proba])
+        #print("max",np.max(t_s_p))
+        #print("min",np.min(t_s_p))
+        
+        for i in range(len(list_sum_proba)):
+            loss+=-list_sum_proba[i]*reward_trajectories[i]
+        
+        loss=loss/len(list_sum_proba)
+        #print("loss",loss)
+        
+        # The following lines take care of the gradient descent step for the variable loss
+          
+        # Discard previous gradients
+        self.optimizer.zero_grad()
+        
+        # Compute the gradient 
+        loss.backward()
+       
+        # Do the gradient descent step
+        casse=False
+        for index, weight in enumerate(self.model.parameters()):
+            gradient, *_ = weight.grad.data
+            gradient=torch.isfinite(gradient)
+            #print(gradient)
+            gradient=np.array(gradient)
+            if np.any(gradient) == False :
+                casse=True
+            #print(f"Gradient of w{index} w.r.t to L: {gradient}")
+              
+        #torch.nn.utils.clip_grad_norm_(self.model.parameters(), args.clip)
+        if(casse):
+            print("explosion, go à l'époque suivante")
+        else:
+            self.optimizer.step()
+       
+        return reward_trajectories, loss
+
+
+    
+
+    
+    
 class RandomAgent(MarelleAgent):
     def __init__(self, env, player_id):
         super(RandomAgent, self).__init__(env, player_id)
