@@ -14,7 +14,7 @@ def train_agent(
     evaluate_freq: int):
 
     if log_training:
-        wandb.init(project="marl")
+        run = wandb.init(project="marl")
         wandb.config.n_trajectories = n_trajectories
         wandb.n_epochs = n_epochs
 
@@ -40,4 +40,7 @@ def train_agent(
         # TODO - add other models when added
         
     trained_agent.train(n_trajectories, n_epochs, opponent_agent, evaluate_agent, log_training, save_model_freq, evaluate_freq)
+
+    if log_training:
+        run.finish()
     
