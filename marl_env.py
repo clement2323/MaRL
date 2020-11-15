@@ -3,24 +3,34 @@ import gym
 from gym import spaces
 from IPython.display import clear_output
 from termcolor import colored
+import numpy as np
 
 class MarelleGymEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self):
+    def __init__(self, end_after_place_phase=False):
         super(MarelleGymEnv, self).__init__()    
-    
-    # Define action and observation space
-    # They must be gym.spaces objects
         self.board = MarelleBoard()
         self.current_player = 1
+        self.end_after_place_phase = end_after_place_phase
+        self.N_STATE = 24 # 24 positions
+        self.N_PLACE_ACTIONS = 24 # 24 positions
+        self.N_PLACE_CAPTURE_ACTIONS = 24 # 23 captures + 1 non capture
+        self.N_MOVE_ACTIONS = 36 # 36 edges
+        self.N_MOVE_CAPTURE_ACTIONS = 25 # 24 captures + 1 non capture
+        self.N_TOTAL_PLACE_ACTIONS = self.N_PLACE_ACTIONS * self.N_PLACE_CAPTURE_ACTIONS
+        self.N_TOTAL_MOVE_CAPTURE_ACTIONS = self.N_MOVE_ACTIONS * self.N_MOVE_CAPTURE_ACTIONS
+        self.N_TOTAL_ACTIONS = self.N_TOTAL_PLACE_ACTIONS + self.N_TOTAL_MOVE_CAPTURE_ACTIONS
         
     def step(self, action): 
    
         self.board.play_action(action,self.current_player)
-
+        
         observation=self.board.get_state()
-        done = self.board.check_if_end(self.current_player) != 0
+        if self.end_after_place_phase:
+            done = self.board.phase != "place"
+        else:
+            done = self.board.check_if_end(self.current_player) != 0
         reward = {}
         reward["game_end"] = self.board.check_if_end(self.current_player) * self.current_player # equal to 1 or 0
         
@@ -29,7 +39,7 @@ class MarelleGymEnv(gym.Env):
             reward["capture_token"] = 1
         else:
             reward["capture_token"] = 0
-
+            
         info = ""
         self.current_player = self.board.get_opponent(self.current_player)
 
@@ -220,6 +230,7 @@ class MarelleBoard():
         return state
     
     def place_token_action(self, action, player):
+
         legal_moves = self.place_token_legal_actions(player)
 
         if action not in legal_moves:
@@ -255,11 +266,11 @@ class MarelleBoard():
         return legal_actions
     
     def move_token_action(self, action, player):
-        edge, opponent_token = action
         legal_moves = self.move_token_legal_actions(player)
         if action not in legal_moves:
             raise Exception('Illegal token move action')
 
+        edge, opponent_token = action
         a, b = edge
         if self.graph.nodes[a]["state"] == 0 and self.graph.nodes[b]["state"] == player:
             cur_node = b
@@ -402,12 +413,12 @@ class MarelleGame():
                 print(f"{self.player_names[self.current_player]}'s turn to play :")
                 self.env.render(action_highlight=action_highlight)
 
-            interrupt = self.step()
+            interrupt, done = self.step()
             
             if interrupt == True:
                 print("Game interrupted, run MarelleGame.play() to continue")
                 return self.action_history
-            if self.env.board.check_if_end(self.current_player) != 0:
+            if done and self.env.board.check_if_end(self.current_player) != 0:
                 if print_board:
                     self.env.render()
                     print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
@@ -424,7 +435,12 @@ class MarelleGame():
         self.action_history = []
 
 
-    def step(self):
+    def step(self) -> (bool, bool):
+        '''
+        Returns game_interruption(bool), game_finished(bool)
+        '''
+        game_interrupted = False
+        game_finished = False
         if self.players[self.current_player] == "human":
             
             legal_actions = self.env.board.get_legal_actions(self.current_player)
@@ -438,23 +454,25 @@ class MarelleGame():
                 action_id = int(input(f"{self.player_names[self.current_player]} to act :"))
             except ValueError:
                 print("Incorrect action input type, please enter an int")
-                return True
+                game_interrupted = True
+                return True, False
             
             if action_id not in legal_action_ids:
                 print("input is illegal action id")
-                return True
+                game_interrupted = True
+                return True, False
 
         else:
             action_id = self.players[self.current_player].learned_act(self.env.board.get_state())
 
-        self.env.board.play_action(action_id, self.current_player)
+        observation, reward, done, info = self.env.step(action_id)
         self.action_count += 1
         self.action_history.append(action_id)
-        return False
+        return False, done
     
     def evaluate(self, n_games, player_id):
         if self.players[1] == "human" or self.players[-1] == "human":
-            raise Exception('Cannot evaluate humans, they are too slow')
+            raise Exception('Cannot evaluate humans, they are too slow of a specie')
         
         evaluation = {
             "n_actions":  0,
