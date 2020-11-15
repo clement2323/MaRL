@@ -11,8 +11,10 @@ class MarelleGymEnv(gym.Env):
     def __init__(self, end_after_place_phase=False):
         super(MarelleGymEnv, self).__init__()    
         self.board = MarelleBoard()
-        self.current_player = 1
         self.end_after_place_phase = end_after_place_phase
+        self.current_player = 1
+        self.current_action = 0
+        self.maximum_actions_before_draw = 300
         self.N_STATE = 24 # 24 positions
         self.N_PLACE_ACTIONS = 24 # 24 positions
         self.N_PLACE_CAPTURE_ACTIONS = 24 # 23 captures + 1 non capture
@@ -26,13 +28,19 @@ class MarelleGymEnv(gym.Env):
    
         self.board.play_action(action,self.current_player)
         
+        reward = {}
+        end_check_status = self.board.check_if_end(self.current_player)
+
         observation=self.board.get_state()
         if self.end_after_place_phase:
             done = self.board.phase != "place"
         else:
-            done = self.board.check_if_end(self.current_player) != 0
-        reward = {}
-        reward["game_end"] = self.board.check_if_end(self.current_player) * self.current_player # equal to 1 or 0
+            done = end_check_status != 0
+        
+        if end_check_status == 99: # draw
+            reward["game_end"] = 0
+        else:
+            reward["game_end"] = end_check_status * self.current_player 
         
         _, opponent_pos = self.board.id_to_action[action]
         if opponent_pos != None:
@@ -49,6 +57,8 @@ class MarelleGymEnv(gym.Env):
   
     def reset(self):
         self.current_player = 1
+        self.current_action = 0
+        self.maximum_actions_before_draw = 300
         self.board.initialize_game()
 
         return self.board.get_state()
@@ -193,6 +203,8 @@ class MarelleBoard():
             
         else:
             self.move_token_action(self.id_to_action[action_id], player)
+        
+        self.current_action += 1
         self.change_phase_if_needed()
         self.check_if_end(player)
     
@@ -370,6 +382,10 @@ class MarelleBoard():
         if len(self.get_legal_action_ids(opponent)) == 0:
             self.phase = "end-block"
             return player
+        
+        if self.current_action > self.maximum_actions_before_draw:
+            self.phase = "end-draw"
+            return 99
 
         return 0
 
@@ -418,10 +434,13 @@ class MarelleGame():
             if interrupt == True:
                 print("Game interrupted, run MarelleGame.play() to continue")
                 return self.action_history
-            if done and self.env.board.check_if_end(self.current_player) != 0:
+            if done:
                 if print_board:
                     self.env.render()
-                    print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                    if self.env.board.check_if_end(self.current_player) == self.current_player:
+                        print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                    else:
+                        print("Game ended with a draw")
                 return self.action_history
             
             self.current_player *= -1
@@ -508,7 +527,10 @@ class MarelleGame():
                 board.play_action(action_id, current_player)
 
                 winner = board.check_if_end(current_player)
-                if winner != 0:
+                if winner == 99:
+                    evaluation["draws_%"] += 1
+                    break
+                elif winner != 0:
                     if winner == player_id:
                         victory_string = "victories"
                     else:
@@ -519,10 +541,6 @@ class MarelleGame():
                         victory_type = "block"
                     
                     evaluation[f"{victory_string}_{victory_type}_%"] += 1
-                    break
-                
-                if n_actions > 250:
-                    evaluation["draws_%"] += 1
                     break
 
                 current_player *= -1
