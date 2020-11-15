@@ -198,23 +198,22 @@ class SingleModelReinforce(ReinforceAgent):
 
                 # au tour de l'agent
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                t_all_moves=self.model(state)
-                t_legal_moves =torch.tensor([t_all_moves[legal_move] for legal_move in legal_moves])
+                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
+                t_all_moves = self.model(state)
+
+                t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
-                #softmax ici
-                t_legal_moves = nn.Softmax(dim=0)(t_legal_moves)
-                #print("num traj",i)
-                #print("t_legal_moves",t_legal_moves)
-                action_id = int(torch.multinomial(t_legal_moves, 1))
-                action = legal_moves[action_id]
+                # Softmax on legal moves
+                t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+
+                proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                action_id = legal_moves[proba_id]
                 
-                #je choisis un legal move mais c'est la proba de l'action que je prends en espérant qu'elle ne vaille pas 0
-                proba=nn.Softmax(dim=0)(self.model(state))
-                sum_lprob+= proba[action].log()
-                #sum_lprob+= proba[action] #J AI ENLEVE LE LOG POUR EVITER LES DIVERGENCES TROP FORTES
-                #print("proba",proba[action].log())
+                # La proba est la proba du softmax des legal moves
+                lprob = t_legal_moves_probas[proba_id].log()
+                sum_lprob+= lprob
                 
-                state, reward, done, info =self.env.step(action)
+                state, reward, done, info =self.env.step(action_id)
 
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
