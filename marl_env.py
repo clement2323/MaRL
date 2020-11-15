@@ -13,8 +13,6 @@ class MarelleGymEnv(gym.Env):
         self.board = MarelleBoard()
         self.end_after_place_phase = end_after_place_phase
         self.current_player = 1
-        self.current_action = 0
-        self.maximum_actions_before_draw = 300
         self.N_STATE = 24 # 24 positions
         self.N_PLACE_ACTIONS = 24 # 24 positions
         self.N_PLACE_CAPTURE_ACTIONS = 24 # 23 captures + 1 non capture
@@ -57,8 +55,7 @@ class MarelleGymEnv(gym.Env):
   
     def reset(self):
         self.current_player = 1
-        self.current_action = 0
-        self.maximum_actions_before_draw = 300
+
         self.board.initialize_game()
 
         return self.board.get_state()
@@ -74,6 +71,7 @@ class MarelleBoard():
     '''
     def __init__(self):
         self.N_TOKENS_PER_PLAYER = 9
+        self.maximum_actions_before_draw = 300
         self.initialize_game()
 
         # List of all placement actions
@@ -135,6 +133,7 @@ class MarelleBoard():
         self.players[-1]["played_tokens"] = 0
         self.players[1]["tokens_on_board"] = 0
         self.players[-1]["tokens_on_board"] = 0
+        self.current_action = 0
 
     def color_value(self, player, position, highlight_positions):
         if player == 1:
