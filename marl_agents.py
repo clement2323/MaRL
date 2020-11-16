@@ -35,7 +35,7 @@ class MarelleAgent(object):
 
 class ReinforceAgent(MarelleAgent):
     ''' This class encapsulates all agents that perform reinforcement training'''
-    def __init__(self, env, player_id, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, models=[]):
+    def __init__(self, env, player_id, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
         super(ReinforceAgent, self).__init__(env, player_id)
         self.epsilon = epsilon
         self.gamma = gamma
@@ -43,7 +43,7 @@ class ReinforceAgent(MarelleAgent):
         self.defeat_reward = defeat_reward
         self.capture_reward = capture_reward
         self.captured_reward = captured_reward
-        self.models=[]
+        self.model = None
 
     def act(self,s,train=True):
         """ This function should return the next action to do:
@@ -152,7 +152,6 @@ class SingleModelReinforce(ReinforceAgent):
             defeat_reward=defeat_reward,
             capture_reward=capture_reward, 
             captured_reward=captured_reward,
-            models=[model]
         )
         self.lr = lr
         self.model = model
@@ -432,6 +431,7 @@ class TripleModelReinforce(ReinforceAgent):
     
     
 class RandomAgent(MarelleAgent):
+    ''' An agent that plays randomly each turn'''
     def __init__(self, env, player_id):
         super(RandomAgent, self).__init__(env, player_id)
         pass
@@ -441,6 +441,7 @@ class RandomAgent(MarelleAgent):
 
 
 class BetterRandomAgent(MarelleAgent):
+    '''An agent that captures if possible, then block if possible, then play randomly'''
     def __init__(self, env, player_id):
         super(BetterRandomAgent, self).__init__(env, player_id)
         pass
