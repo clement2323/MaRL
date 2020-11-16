@@ -22,25 +22,25 @@ class MarelleGymEnv(gym.Env):
         self.N_TOTAL_MOVE_CAPTURE_ACTIONS = self.N_MOVE_ACTIONS * self.N_MOVE_CAPTURE_ACTIONS
         self.N_TOTAL_ACTIONS = self.N_TOTAL_PLACE_ACTIONS + self.N_TOTAL_MOVE_CAPTURE_ACTIONS
         
-    def step(self, action): 
+    def step(self, action_id): 
    
-        self.board.play_action(action,self.current_player)
+        self.board.play_action(action_id)
         
         reward = {}
-        end_check_status = self.board.check_if_end(self.current_player)
+        end_check_status = self.board.check_if_end()
 
         observation=self.board.get_state()
         if self.end_after_place_phase:
             done = self.board.phase != "place"
         else:
-            done = end_check_status != 0
+            done = (end_check_status != 0)
         
         if end_check_status == 99: # draw
             reward["game_end"] = 0
         else:
             reward["game_end"] = end_check_status * self.current_player 
         
-        _, opponent_pos = self.board.id_to_action[action]
+        _, opponent_pos = self.board.id_to_action[action_id]
         if opponent_pos != None:
             reward["capture_token"] = 1
         else:
@@ -72,7 +72,22 @@ class MarelleBoard():
     def __init__(self):
         self.N_TOKENS_PER_PLAYER = 9
         self.maximum_actions_before_draw = 300
-        self.initialize_game()
+        graph = nx.Graph()
+        for i in range(3):
+            for j in range(8):
+                graph.add_node((i, j))
+                graph.nodes[(i, j)]["state"] = 0
+
+        for i in range(3):
+            for j in range(8):
+                nj = j + 1
+                if nj >= 8:
+                    nj = 0
+                graph.add_edge((i, j), (i, nj))
+                if i != 2 and (j % 2) == 0:
+                    graph.add_edge((i, j), (i+1, j))
+        
+        self.graph = graph
 
         # List of all placement actions
         place_token_action_list = []
@@ -108,24 +123,12 @@ class MarelleBoard():
         
         self.id_to_action = id_to_action
         self.action_to_id = action_to_id
+        self.initialize_game()
+
 
     def initialize_game(self):
-        graph = nx.Graph()
-        for i in range(3):
-            for j in range(8):
-                graph.add_node((i, j))
-                graph.nodes[(i, j)]["state"] = 0
-
-        for i in range(3):
-            for j in range(8):
-                nj = j + 1
-                if nj >= 8:
-                    nj = 0
-                graph.add_edge((i, j), (i, nj))
-                if i != 2 and (j % 2) == 0:
-                    graph.add_edge((i, j), (i+1, j))
-        
-        self.graph = graph
+        for node in self.graph.nodes:
+            self.graph.nodes[node]["state"] = 0
 
         self.phase = "place"
         self.players = {1: {}, -1: {}}
@@ -134,6 +137,9 @@ class MarelleBoard():
         self.players[1]["tokens_on_board"] = 0
         self.players[-1]["tokens_on_board"] = 0
         self.current_action = 0
+        self.current_player = 1
+        self.update_legal_actions()
+
 
     def color_value(self, player, position, highlight_positions):
         if player == 1:
@@ -196,42 +202,43 @@ class MarelleBoard():
         """
         print(board_grid)
 
-    def play_action(self, action_id, player):
+    def play_action(self, action_id):
         if self.phase == "place":
-            self.place_token_action(self.id_to_action[action_id], player)
+            self.place_token_action(self.id_to_action[action_id], self.current_player)
             
         else:
-            self.move_token_action(self.id_to_action[action_id], player)
+            self.move_token_action(self.id_to_action[action_id], self.current_player)
         
         self.current_action += 1
+        self.current_player *= -1
         self.change_phase_if_needed()
-        self.check_if_end(player)
+        self.update_legal_actions()
+        # print(f"{self.phase} - player {self.current_player} - legal actions : {self.players[self.current_player]['legal_actions']}")
+        self.check_if_end()
+        # print(self.check_if_end())
+    
+    def update_legal_actions(self):
+        for player in [1, -1]:
+            legal_actions = []
+
+            if self.phase == "place":
+                legal_actions = self.place_token_legal_actions(player)
+            
+            elif self.phase == "move":
+                legal_actions = self.move_token_legal_actions(player)
+
+            legal_action_ids = []
+            for legal_action in legal_actions:
+                legal_action_ids.append(self.action_to_id[legal_action])
+
+            self.players[player]["legal_actions"] = legal_actions
+            self.players[player]["legal_action_ids"] = legal_action_ids
     
     def get_legal_actions(self, player):
-        legal_actions = []
-
-        if self.phase == "place":
-            legal_actions = self.place_token_legal_actions(player)
-        
-        elif self.phase == "move":
-            legal_actions = self.move_token_legal_actions(player)
-
-        return legal_actions
+        return self.players[player]["legal_actions"]
     
     def get_legal_action_ids(self, player):
-        legal_actions = []
-        legal_action_ids = []
-
-        if self.phase == "place":
-            legal_actions = self.place_token_legal_actions(player)
-        
-        elif self.phase == "move":
-            legal_actions = self.move_token_legal_actions(player)
-        
-        for action in legal_actions:
-            legal_action_ids.append(self.action_to_id[action])
-
-        return legal_action_ids
+        return self.players[player]["legal_action_ids"]
 
     def get_state(self):
         state = []
@@ -242,7 +249,7 @@ class MarelleBoard():
     
     def place_token_action(self, action, player):
 
-        legal_moves = self.place_token_legal_actions(player)
+        legal_moves = self.get_legal_actions(player)
 
         if action not in legal_moves:
             raise Exception('Illegal place move')
@@ -295,17 +302,22 @@ class MarelleBoard():
         for node in self.graph.nodes:
             if self.graph.nodes[node]["state"] == 0:
                 self.graph.nodes[node]["state"] = player
-                if self.check_if_capture(self.graph.nodes, node, player):
+                
+                n_capturable_opponent_nodes = 0
+                if self.check_if_capture(node, player):
                     for opponent_node in opponent_nodes:
-                        legal_actions.append((node, opponent_node))
-                else:
+                        if not self.check_if_capture(opponent_node, self.get_opponent(player)): # prevent removing lined tokens
+                            legal_actions.append((node, opponent_node))
+                            n_capturable_opponent_nodes += 1
+
+                if n_capturable_opponent_nodes == 0:
                     legal_actions.append((node, None))
                 self.graph.nodes[node]["state"] = 0
         
         return legal_actions
     
     def move_token_action(self, action, player):
-        legal_moves = self.move_token_legal_actions(player)
+        legal_moves = self.get_legal_actions(player)
         if action not in legal_moves:
             raise Exception('Illegal token move action')
 
@@ -347,17 +359,21 @@ class MarelleBoard():
                 continue
             self.graph.nodes[new_node]["state"] = player
             self.graph.nodes[cur_node]["state"] = 0
-            if self.check_if_capture(self.graph.nodes, new_node, player):
+            
+            n_capturable_opponent_nodes = 0
+            if self.check_if_capture(new_node, player):
                 for opponent_node in opponent_nodes:
-                    legal_actions.append((edge, opponent_node))
-            else:
+                    if not self.check_if_capture(opponent_node, self.get_opponent(player)): # prevent removing lined tokens
+                        legal_actions.append((edge, opponent_node))
+                        n_capturable_opponent_nodes += 1
+            if n_capturable_opponent_nodes == 0:
                 legal_actions.append((edge, None))
             self.graph.nodes[new_node]["state"] = 0
             self.graph.nodes[cur_node]["state"] = player
             
         return legal_actions
     
-    def check_if_capture(self, nodes, position, player):
+    def check_if_capture(self, position, player):
         r, t = position
         capture = False
 
@@ -366,7 +382,7 @@ class MarelleBoard():
             r_capture = True
             r_lines = [0, 1, 2]
             for line_r in r_lines:
-                if nodes[line_r, t]["state"] != player:
+                if self.graph.nodes[line_r, t]["state"] != player:
                     r_capture = False
                     break
             if r_capture == True:
@@ -381,7 +397,7 @@ class MarelleBoard():
             
             t_capture = True
             for line_t in t_line:
-                if nodes[r, line_t]["state"] != player:
+                if self.graph.nodes[r, line_t]["state"] != player:
                     t_capture = False
                     break
             
@@ -394,21 +410,23 @@ class MarelleBoard():
         if self.players[1]["played_tokens"] == self.N_TOKENS_PER_PLAYER and self.players[-1]["played_tokens"] == self.N_TOKENS_PER_PLAYER:
             self.phase = "move"
 
-    def check_if_end(self, player):
+    def check_if_end(self):
         '''
         Returns 0 if the game is not ended and the id of the player if a player won
         '''
         if self.phase == "place":
             return 0
 
+        player = self.current_player
         opponent = self.get_opponent(player)
-        if self.players[opponent]["tokens_on_board"] <= 2:
-            self.phase = "end-capture"
-            return player
         
-        if len(self.get_legal_action_ids(opponent)) == 0:
+        if self.players[player]["tokens_on_board"] <= 2:
+            self.phase = "end-capture"
+            return opponent
+        
+        if len(self.get_legal_action_ids(player)) == 0:
             self.phase = "end-block"
-            return player
+            return opponent
         
         if self.current_action > self.maximum_actions_before_draw:
             self.phase = "end-draw"
@@ -464,8 +482,8 @@ class MarelleGame():
             if done:
                 if print_board:
                     self.env.render()
-                    if self.env.board.check_if_end(self.current_player) == self.current_player:
-                        print(f"Game ended with {self.player_names[self.env.board.check_if_end(self.current_player)]} as the winner !")
+                    if self.env.board.check_if_end() == self.current_player:
+                        print(f"Game ended with {self.player_names[self.env.board.check_if_end()]} as the winner !")
                     else:
                         print("Game ended with a draw")
                 return self.action_history
@@ -551,9 +569,9 @@ class MarelleGame():
                         evaluation["n_captured_" + board.phase] += 1
             
 
-                board.play_action(action_id, current_player)
+                board.play_action(action_id)
 
-                winner = board.check_if_end(current_player)
+                winner = board.check_if_end()
                 if winner == 99:
                     evaluation["draws_%"] += 1
                     break

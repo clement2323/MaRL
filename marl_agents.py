@@ -273,6 +273,7 @@ class SingleModelReinforce(ReinforceAgent):
 
 
 class RandomAgent(MarelleAgent):
+    ''' An agent that plays randomly each turn'''
     def __init__(self, env, player_id):
         super(RandomAgent, self).__init__(env, player_id)
         pass
@@ -282,6 +283,7 @@ class RandomAgent(MarelleAgent):
 
 
 class BetterRandomAgent(MarelleAgent):
+    '''An agent that captures if possible, then block if possible, then play randomly'''
     def __init__(self, env, player_id):
         super(BetterRandomAgent, self).__init__(env, player_id)
         pass
