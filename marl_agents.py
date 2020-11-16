@@ -271,13 +271,13 @@ class SingleModelReinforce(ReinforceAgent):
        
         return reward_trajectories, loss
 
-
-class SingleModelReinforce(ReinforceAgent):
+    
+class TripleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, player_id, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
-        super(SingleModelReinforce, self).__init__(
+    def __init__(self, env, player_id, model1, model2, model3, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+        super(TripelModelReinforce, self).__init__(
             env=env, 
             player_id=player_id, 
             epsilon=epsilon, 
@@ -286,7 +286,7 @@ class SingleModelReinforce(ReinforceAgent):
             defeat_reward=defeat_reward,
             capture_reward=capture_reward, 
             captured_reward=captured_reward,
-            models=[model]
+            models=[model1,model2,model3]
         )
         self.lr = lr
         self.model = model
@@ -334,12 +334,35 @@ class SingleModelReinforce(ReinforceAgent):
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
                 t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
                 t_all_moves = self.model(state)
-
+                
+                ######
+                if self.env.board.phase == 'move':
+                    log_proba_place = 0  #append
+                    log_proba_move = a
+                    if capture == True :
+                        #choix réseau capture sur action hypotéthique
+                        log_proba_capture=a
+                    else :
+                        log_proba_capture = 0
+                    
+                if self.en.board.phase=='place':
+                    log_proba_res_place= a
+                    log_proba_res_move = 0
+                    if capture == True :
+                        #choix réseau sur state hypotéthique
+                        log_proba=a
+                    else :
+                        log_proba_capture = 0
+                     
+ 
+                    #dans tous les cas, créer une place pour une proba même si elle est nulle comme ça il y a juste à faire une 
+                    #multiplication terme à termes
+                
                 t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
                 # Softmax on legal moves
                 t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-
+                
                 proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
                 action_id = legal_moves[proba_id]
                 
@@ -352,7 +375,6 @@ class SingleModelReinforce(ReinforceAgent):
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
 
-
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
                     action = opponent.act(state)
@@ -361,6 +383,7 @@ class SingleModelReinforce(ReinforceAgent):
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                 rewards.append(agent_reward)
+                
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
             reward_trajectories.append(self._compute_returns(rewards))
@@ -405,8 +428,6 @@ class SingleModelReinforce(ReinforceAgent):
        
         return reward_trajectories, loss
 
-
-    
 
     
     
