@@ -34,7 +34,7 @@ def train_agent(
         wandb.config.evaluation_agent = evaluate_agent.__class__.__name__
 
         # Models to watch metrics from
-        if trained_agent.model != None
+        if trained_agent.model != None:
             wandb.watch(trained_agent.model)
         
         # TODO - add other models when added

@@ -257,6 +257,34 @@ class MarelleBoard():
             self.graph.nodes[opponent_token_pos]["state"] = 0
             self.players[self.get_opponent(player)]["tokens_on_board"] -= 1
     
+    def place_token_intermediary_state(self, place_position, player):
+        initial_state = self.graph.nodes[place_position]["state"]
+        self.graph.nodes[place_position]["state"] = player
+        intermediary_state = self.get_state()
+        self.graph.nodes[place_position]["state"] = initial_state
+        return intermediary_state
+
+    def move_token_intermediary_state(self, move_edge, player):
+        a, b = move_edge
+        state_a = self.graph.nodes[a]["state"]
+        state_b = self.graph.nodes[b]["state"]
+        if state_a == player:
+            self.graph.nodes[a]["state"] = 0
+            self.graph.nodes[b]["state"] = player
+            intermediary_state = self.get_state()
+            self.graph.nodes[a]["state"] = player
+            self.graph.nodes[b]["state"] = state_b
+        elif state_b == player:
+            self.graph.nodes[b]["state"] = 0
+            self.graph.nodes[a]["state"] = player
+            intermediary_state = self.get_state()
+            self.graph.nodes[b]["state"] = player
+            self.graph.nodes[a]["state"] = state_a
+        else:
+            intermediary_state = self.get_state()
+        
+        return intermediary_state
+
     def place_token_legal_actions(self, player):
         opponent_nodes = []
         for node in self.graph.nodes:
