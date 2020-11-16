@@ -35,7 +35,7 @@ def train_agent(
 
         # Models to watch metrics from
         if trained_agent.model != None:
-            wandb.watch(trained_agent.model)
+            wandb.watch(trained_agent.model, log='all', log_freq=10)
         
         # TODO - add other models when added
         
