@@ -37,6 +37,7 @@ def train_agent(
         if trained_agent.model != None:
             wandb.watch(trained_agent.model, log='all', log_freq=5)
         
+        
         # TODO - add other models when added
         
     trained_agent.train(n_trajectories, n_epochs, opponent_agent, evaluate_agent, log_training, save_model_freq, evaluate_freq)

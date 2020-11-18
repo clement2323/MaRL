@@ -77,7 +77,7 @@ class ReinforceAgent(MarelleAgent):
             print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
             if (epoch+1) % evaluate_freq == 0:
-                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+                    evaluation = evaluate(self.env, self, evaluation_agent, 200, self.player_id)
                     print(evaluation)
             
             if log_wandb:
@@ -199,7 +199,6 @@ class SingleModelReinforce(ReinforceAgent):
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
                 t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
                 t_all_moves = self.model(state)
-
                 t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
                 # Softmax on legal moves
@@ -275,7 +274,7 @@ class TripleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, player_id, model1, model2, model3, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+    def __init__(self, env, player_id, model_place, model_move, model_capture, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
         super(TripelModelReinforce, self).__init__(
             env=env, 
             player_id=player_id, 
@@ -285,12 +284,20 @@ class TripleModelReinforce(ReinforceAgent):
             defeat_reward=defeat_reward,
             capture_reward=capture_reward, 
             captured_reward=captured_reward,
-            models=[model1,model2,model3]
         )
         self.lr = lr
-        self.model = model
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.model_place = model_place
+        self.model_move = model_place
+        self.model_capture = model_capture
         
+        self.optimizer_place = torch.optim.Adam(self.model_place.parameters(), lr=lr)
+        self.optimizer_move = torch.optim.Adam(self.model_move.parameters(), lr=lr)
+        self.optimizer_capture = torch.optim.Adam(self.model_capture.parameters(), lr=lr)
+        
+        
+        
+        
+        #TO DO FAIRE DU LEARN ACT
     def learned_act(self, s): #checker legal move + argmax
         s=torch.tensor(s,dtype=torch.float)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
@@ -330,45 +337,80 @@ class TripleModelReinforce(ReinforceAgent):
                 state=torch.tensor(state, dtype=torch.float)
 
                 # au tour de l'agent
-                legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
-                t_all_moves = self.model(state)
+                
+                
+                
+           
+                #env.board.place_token_intermediary_state((0, 1), 1) 
+                #env.board.move_token_intermediary_state(((0, 0), (0, 1), 1)
                 
                 ######
-                if self.env.board.phase == 'move':
-                    log_proba_place = 0  #append
-                    log_proba_move = a
-                    if capture == True :
-                        #choix réseau capture sur action hypotéthique
-                        log_proba_capture=a
-                    else :
-                        log_proba_capture = 0
-                    
                 if self.en.board.phase=='place':
-                    log_proba_res_place= a
-                    log_proba_res_move = 0
+                    #model place
+                    #redefinir le legal_moves_place
+                    #un parmi les 24 moves places
+                    
+                    legal_moves_place = self.env.board.get_legal_action_ids(self.player_id)
+                    t_legal_moves_place = torch.tensor(legal_moves_place, dtype=torch.int64)
+                    t_all_moves = self.model_place(state)
+                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_place)
+                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                    
+                    #action_id pour l'action hypothétique
+                    action_id = legal_moves[proba_id]
+                    
+                    log_prob_place = t_legal_moves_probas[proba_id].log()
+                    sum_log_prob_place+=log_prob_place
+                    
+                    
                     if capture == True :
                         #choix réseau sur state hypotéthique
-                        log_proba=a
-                    else :
-                        log_proba_capture = 0
+                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
+                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
+                         #Définir SHYP !!
+                        t_all_moves = self.models[2](s_hyp)
+                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
+                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                        action_id = legal_moves[proba_id]
+                        
+                        log_prob_capture = t_legal_moves_probas[proba_id].log()
+                        sum_log_prob_capture+=log_prob_capture
+                        
+                   
                      
- 
-                    #dans tous les cas, créer une place pour une proba même si elle est nulle comme ça il y a juste à faire une 
-                    #multiplication terme à termes
-                
-                t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
-                
-                # Softmax on legal moves
-                t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-                
-                proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                action_id = legal_moves[proba_id]
-                
+                if self.env.board.phase == 'move':
+                    legal_moves_move = self.env.board.get_legal_action_ids(self.player_id)
+                    t_legal_moves_move = torch.tensor(legal_moves_move, dtype=torch.int64)
+                    t_all_moves = self.models[1](state)
+                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_move)
+                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                    action_id = legal_moves[proba_id]
+                     
+                    log_prob_move = t_legal_moves_probas[proba_id].log()
+                    sum_log_prob_move+=log_prob_move
+                    
+                    if capture == True :
+                        #choix réseau sur state hypotéthique
+                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
+                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
+                         #Définir SHYP !!
+                        t_all_moves = self.models[2](s_hyp)
+                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
+                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                        action_id = legal_moves[proba_id]
+                        
+                        log_prob_capture = t_legal_moves_probas[proba_id].log()
+                        sum_log_prob_capture+=log_prob_capture
+                        
+                    
+               #DEFINIR L'ACTION AU FINAL
+            
                 # La proba est la proba du softmax des legal moves
-                lprob = t_legal_moves_probas[proba_id].log()
-                sum_lprob+= lprob
-                
+
                 state, reward, done, info =self.env.step(action_id)
 
                 agent_reward += reward["game_end"] * self.win_reward
@@ -383,49 +425,48 @@ class TripleModelReinforce(ReinforceAgent):
 
                 rewards.append(agent_reward)
                 
-            #print("sumlprob",sum_lprob)
-            list_sum_proba.append(sum_lprob)
+           
+            list_sum_log_prob_place.append(sum_log_prob_place)
+            list_sum_log_prob_move.append(sum_log_prob_move)
+            list_sum_log_prob_capture.append(sum_log_prob_capture)
+            
             reward_trajectories.append(self._compute_returns(rewards))
         
-        loss=0
+        loss_place=0
+        loss_move=0
+        loss_capture=0
         
-        #print("vecteur sum prob pour chaque trajectoire")
-        #t_s_p=np.array([l.detach() for l in list_sum_proba])
-        #print("max",np.max(t_s_p))
-        #print("min",np.min(t_s_p))
+        for i in range(len(list_sum_log_prob_place)):
+            loss_place+=-list_sum_log_prob_place[i]*reward_trajectories[i]
+            loss_move+=-list_sum_log_prob_move[i]*reward_trajectories[i]
+            loss_capture+=-list_sum_log_prob_capture[i]*reward_trajectories[i]
         
-        for i in range(len(list_sum_proba)):
-            loss+=-list_sum_proba[i]*reward_trajectories[i]
-        
-        loss=loss/len(list_sum_proba)
+        loss_place=loss_place/len(list_sum_log_prob_place)
+        loss_move=loss_move/len(list_sum_log_prob_place)
+        loss_capture=loss_capture/len(list_sum_log_prob_place)
         #print("loss",loss)
         
         # The following lines take care of the gradient descent step for the variable loss
           
         # Discard previous gradients
-        self.optimizer.zero_grad()
+        self.optimizer_place.zero_grad()
+        self.optimizer_move.zero_grad()
+        self.optimizer_capture.zero_grad()
         
         # Compute the gradient 
-        loss.backward()
+        loss_place.backward()
+        loss_move.backward()
+        loss_capture.backward()
        
         # Do the gradient descent step
-        casse=False
-        for index, weight in enumerate(self.model.parameters()):
-            gradient, *_ = weight.grad.data
-            gradient=torch.isfinite(gradient)
-            #print(gradient)
-            gradient=np.array(gradient)
-            if np.any(gradient) == False :
-                casse=True
-            #print(f"Gradient of w{index} w.r.t to L: {gradient}")
-              
+        
         #torch.nn.utils.clip_grad_norm_(self.model.parameters(), args.clip)
-        if(casse):
-            print("explosion, go à l'époque suivante")
-        else:
-            self.optimizer.step()
+        self.optimizer_place.step()
+        self.optimizer_move.step()
+        self.optimizer_capture.step()
        
-        return reward_trajectories, loss
+       
+        return reward_trajectories, loss_place
 
 
     

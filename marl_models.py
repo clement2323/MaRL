@@ -86,7 +86,7 @@ class ConvModel(nn.Module):
         
         mat_x=self.transform_input_to_mat(x)
         x=self.conv3(self.conv2(self.conv1(mat_x)))
-        print(x.shape[0]*x.shape[1]*x.shape[2])
+        #print(x.shape[0]*x.shape[1]*x.shape[2])
         x = x.view(-1, 40)
         x= self.fc1(x)
         x = F.relu(x)
