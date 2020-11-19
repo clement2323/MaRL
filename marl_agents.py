@@ -347,6 +347,7 @@ class TripleModelReinforce(ReinforceAgent):
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                     if done:
+                        rewards.append(agent_reward)
                         break
                     
                 state=torch.tensor(state, dtype=torch.float)
