@@ -3,6 +3,7 @@ import gym
 from gym import spaces
 from IPython.display import clear_output
 from termcolor import colored
+from tqdm import tqdm_notebook as tqdm
 import numpy as np
 
 class MarelleGymEnv(gym.Env):
@@ -38,7 +39,7 @@ class MarelleGymEnv(gym.Env):
         if end_check_status == 99: # draw
             reward["game_end"] = 0
         else:
-            reward["game_end"] = end_check_status * self.current_player 
+            reward["game_end"] = end_check_status * self.current_player
         
         _, opponent_pos = self.board.id_to_action[action_id]
         if opponent_pos != None:
@@ -441,8 +442,10 @@ class MarelleBoard():
         return 1
     
 class MarelleGame():
-    def __init__(self, env, player1, player2):
+    def __init__(self, env:MarelleGymEnv, player1, player2):
         self.env = env
+        player1.player_id = 1
+        player2.player_id = -1
         self.players = {1: player1, -1: player2}
         self.player_names = {}
         if player1 == "human":
@@ -551,7 +554,8 @@ class MarelleGame():
             "defeats_block_%":  0        
         }
         
-        for i in range(n_games):
+        evaluation_loop = tqdm(range(n_games), desc=f"Evaluation as player {player_id}", leave=False)
+        for i in evaluation_loop:
             self.reset()
             game_history = self.play(print_board=False, clear_print_outputs=False)
 

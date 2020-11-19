@@ -10,12 +10,13 @@ import itertools
 import seaborn as sns
 import wandb
 import os
+from tqdm import tqdm_notebook as tqdm
 
 class MarelleAgent(object):
     '''
     A basic marelle agent class for both RL and non RL AIs
     '''
-    def __init__(self, env, player_id):
+    def __init__(self, env):
         self.env = env
         self.n_actions = len(self.env.board.id_to_action)
         self.place_actions = 24 # 24 positions
@@ -24,7 +25,7 @@ class MarelleAgent(object):
         self.move_actions = 36 # 36 edges
         self.move_capture_actions = 25 # (24 captures + 1 non capture)
         self.n_total_move_actions = self.move_actions * self.move_capture_actions
-        self.player_id = player_id
+        self.player_id = 0
 
     def act(self, state):
         return self.learned_act(state)
@@ -35,8 +36,8 @@ class MarelleAgent(object):
 
 class ReinforceAgent(MarelleAgent):
     ''' This class encapsulates all agents that perform reinforcement training'''
-    def __init__(self, env, player_id, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
-        super(ReinforceAgent, self).__init__(env, player_id)
+    def __init__(self, env, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
+        super(ReinforceAgent, self).__init__(env)
         self.epsilon = epsilon
         self.gamma = gamma
         self.win_reward = win_reward
@@ -70,14 +71,15 @@ class ReinforceAgent(MarelleAgent):
             
         """
         rewards = []
-        for epoch in range(n_epoch):
+        epoch_loop = tqdm(range(n_epoch), desc="Epochs")
+        for epoch in epoch_loop:
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
             rewards.append(np.mean(epoch_reward))
 
             print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
             if (epoch+1) % evaluate_freq == 0:
-                    evaluation = evaluate(self.env, self, evaluation_agent, 200, self.player_id)
+                    evaluation = evaluate(self.env, self, evaluation_agent, 200)
                     print(evaluation)
             
             if log_wandb:
@@ -142,10 +144,9 @@ class SingleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, player_id, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+    def __init__(self, env, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
         super(SingleModelReinforce, self).__init__(
             env=env, 
-            player_id=player_id, 
             epsilon=epsilon, 
             gamma=gamma, 
             win_reward=win_reward, 
@@ -171,9 +172,16 @@ class SingleModelReinforce(ReinforceAgent):
       
         reward_trajectories=[]
         list_sum_proba=[]
+
+        self.player_id = 1
+        opponent.player_id = -1
         
-        #Here I compute n_trajectories trajectories in order to calculate the MonteCarlo estimate of the J function
-        for i in range(n_trajectories):
+        trajectory_loop = tqdm(range(n_trajectories), desc="Trajectories", leave=False)
+        for i in trajectory_loop:
+            # Swap starting player at the middle of the training
+            if i == int(n_trajectories/2):
+                self.player_id = -1
+                opponent.player_id = 1
             done = False
             rewards=[]
 
@@ -183,14 +191,15 @@ class SingleModelReinforce(ReinforceAgent):
             sum_lprob=0
             while not done:
                 agent_reward = 0
-                if self.player_id == 2:
-                    #au tour de l'adversaire si l'adversaire commence
+                if self.player_id == -1:
+                    # au tour de l'adversaire si l'adversaire commence
                     action=opponent.act(state)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                     if done:
+                        rewards.append(agent_reward)
                         break
                     
                 state=torch.tensor(state, dtype=torch.float)
@@ -274,10 +283,9 @@ class TripleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, player_id, model_place, model_move, model_capture, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+    def __init__(self, env, model_place, model_move, model_capture, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
         super(TripelModelReinforce, self).__init__(
             env=env, 
-            player_id=player_id, 
             epsilon=epsilon, 
             gamma=gamma, 
             win_reward=win_reward, 
@@ -313,8 +321,15 @@ class TripleModelReinforce(ReinforceAgent):
         reward_trajectories=[]
         list_sum_proba=[]
         
-        #Here I compute n_trajectories trajectories in order to calculate the MonteCarlo estimate of the J function
-        for i in range(n_trajectories):
+        self.player_id = 1
+        opponent.player_id = -1
+        
+        trajectory_loop = tqdm(range(n_trajectories), desc="Trajectories", leave=False)
+        for i in trajectory_loop:
+            # Swap starting player at the middle of the training
+            if i == int(n_trajectories/2):
+                self.player_id = -1
+                opponent.player_id = 1
             done = False
             rewards=[]
 
@@ -324,7 +339,7 @@ class TripleModelReinforce(ReinforceAgent):
             sum_lprob=0
             while not done:
                 agent_reward = 0
-                if self.player_id == 2:
+                if self.player_id == -1:
                     #au tour de l'adversaire si l'adversaire commence
                     action=opponent.act(state)
                     state, reward, done, info = self.env.step(action)
@@ -473,8 +488,8 @@ class TripleModelReinforce(ReinforceAgent):
     
 class RandomAgent(MarelleAgent):
     ''' An agent that plays randomly each turn'''
-    def __init__(self, env, player_id):
-        super(RandomAgent, self).__init__(env, player_id)
+    def __init__(self, env):
+        super(RandomAgent, self).__init__(env)
         pass
 
     def learned_act(self, s):
@@ -483,8 +498,8 @@ class RandomAgent(MarelleAgent):
 
 class BetterRandomAgent(MarelleAgent):
     '''An agent that captures if possible, then block if possible, then play randomly'''
-    def __init__(self, env, player_id):
-        super(BetterRandomAgent, self).__init__(env, player_id)
+    def __init__(self, env):
+        super(BetterRandomAgent, self).__init__(env)
         pass
 
     def learned_act(self, s):
