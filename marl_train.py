@@ -45,3 +45,41 @@ def train_agent(
     if log_training:
         run.finish()
     
+def adversarial_training(
+    env: MarelleGymEnv,
+    n_trajectories: int,
+    first_agent: ReinforceAgent,
+    second_agent: ReinforceAgent,      
+    evaluate_agent: MarelleAgent,
+    log_training: bool,
+    save_model_freq: int,
+    n_par_alternance = 10,
+    n_dizaine_epochs = 500):
+
+    for i in range(n_dizaine_epochs):
+
+        train_agent(
+            env=env,
+            n_epochs=n_par_alternance,
+            n_trajectories=n_trajectories,
+            trained_agent=first_agent,
+            opponent_agent=second_agent,
+            evaluate_agent=evaluate_agent,
+            log_training=log_training,
+            save_model_freq= save_model_freq,
+            evaluate_freq= n_par_alternance
+        )
+        env.reset()
+        
+        train_agent(
+            env=env,
+            n_epochs=n_par_alternance,
+            n_trajectories=n_trajectories,
+            trained_agent=second_agent,
+            opponent_agent=first_agent,
+            evaluate_agent=evaluate_agent,
+            log_training=log_training,
+            save_model_freq= save_model_freq,
+            evaluate_freq= n_par_alternance
+        )
+        env.reset()
