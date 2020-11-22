@@ -27,7 +27,7 @@ class MarelleAgent(object):
         self.n_total_move_actions = self.move_actions * self.move_capture_actions
         self.player_id = 0
 
-    def act(self, state):
+    def act(self, state, train=True):
         return self.learned_act(state)
 
     def learned_act(self, state):
@@ -51,7 +51,8 @@ class ReinforceAgent(MarelleAgent):
         an integer between 0 and 4 (not included) with a random exploration of epsilon"""
         if train:
             if np.random.rand() <= self.epsilon:
-                a = np.random.randint(0, self.n_actions, size=1)[0]
+                a = np.random.choice(self.env.board.get_legal_action_ids(self.player_id))
+
             else:
                 a = self.learned_act(s)
         else: # in some cases, this can improve the performance.. remove it if poor performances
@@ -193,11 +194,10 @@ class SingleModelReinforce(ReinforceAgent):
                 agent_reward = 0
                 if self.player_id == -1:
                     # au tour de l'adversaire si l'adversaire commence
-                    action=opponent.act(state)
+                    action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
-
                     if done:
                         rewards.append(agent_reward)
                         break
@@ -225,15 +225,15 @@ class SingleModelReinforce(ReinforceAgent):
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
 
-
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
-                    action = opponent.act(state)
+                    action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                 rewards.append(agent_reward)
+                
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
             reward_trajectories.append(self._compute_returns(rewards))
@@ -341,7 +341,7 @@ class TripleModelReinforce(ReinforceAgent):
                 agent_reward = 0
                 if self.player_id == -1:
                     #au tour de l'adversaire si l'adversaire commence
-                    action=opponent.act(state)
+                    action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
@@ -434,7 +434,7 @@ class TripleModelReinforce(ReinforceAgent):
 
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
-                    action = opponent.act(state)
+                    action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
