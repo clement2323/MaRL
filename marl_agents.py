@@ -10,12 +10,13 @@ import itertools
 import seaborn as sns
 import wandb
 import os
+from tqdm import tqdm_notebook as tqdm
 
 class MarelleAgent(object):
     '''
     A basic marelle agent class for both RL and non RL AIs
     '''
-    def __init__(self, env, player_id):
+    def __init__(self, env):
         self.env = env
         self.n_actions = len(self.env.board.id_to_action)
         self.place_actions = 24 # 24 positions
@@ -24,9 +25,9 @@ class MarelleAgent(object):
         self.move_actions = 36 # 36 edges
         self.move_capture_actions = 25 # (24 captures + 1 non capture)
         self.n_total_move_actions = self.move_actions * self.move_capture_actions
-        self.player_id = player_id
+        self.player_id = 0
 
-    def act(self, state):
+    def act(self, state, train=True):
         return self.learned_act(state)
 
     def learned_act(self, state):
@@ -35,8 +36,8 @@ class MarelleAgent(object):
 
 class ReinforceAgent(MarelleAgent):
     ''' This class encapsulates all agents that perform reinforcement training'''
-    def __init__(self, env, player_id, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
-        super(ReinforceAgent, self).__init__(env, player_id)
+    def __init__(self, env, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
+        super(ReinforceAgent, self).__init__(env)
         self.epsilon = epsilon
         self.gamma = gamma
         self.win_reward = win_reward
@@ -50,7 +51,8 @@ class ReinforceAgent(MarelleAgent):
         an integer between 0 and 4 (not included) with a random exploration of epsilon"""
         if train:
             if np.random.rand() <= self.epsilon:
-                a = np.random.randint(0, self.n_actions, size=1)[0]
+                a = np.random.choice(self.env.board.get_legal_action_ids(self.player_id))
+
             else:
                 a = self.learned_act(s)
         else: # in some cases, this can improve the performance.. remove it if poor performances
@@ -70,14 +72,15 @@ class ReinforceAgent(MarelleAgent):
             
         """
         rewards = []
-        for epoch in range(n_epoch):
+        epoch_loop = tqdm(range(n_epoch), desc="Epochs")
+        for epoch in epoch_loop:
             epoch_reward, epoch_loss = self.optimize_model(n_trajectories, opponent_agent)
             rewards.append(np.mean(epoch_reward))
 
             print(f'Episode {epoch + 1}/{n_epoch}: rewards {round(np.mean(epoch_reward), 2)} +/- {round(np.std(epoch_reward), 2)} - Loss : {epoch_loss}')
             
             if (epoch+1) % evaluate_freq == 0:
-                    evaluation = evaluate(self.env, self, evaluation_agent, 100, self.player_id)
+                    evaluation = evaluate(self.env, self, evaluation_agent, 200)
                     print(evaluation)
             
             if log_wandb:
@@ -142,10 +145,9 @@ class SingleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, player_id, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+    def __init__(self, env, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
         super(SingleModelReinforce, self).__init__(
             env=env, 
-            player_id=player_id, 
             epsilon=epsilon, 
             gamma=gamma, 
             win_reward=win_reward, 
@@ -171,9 +173,16 @@ class SingleModelReinforce(ReinforceAgent):
       
         reward_trajectories=[]
         list_sum_proba=[]
+
+        self.player_id = 1
+        opponent.player_id = -1
         
-        #Here I compute n_trajectories trajectories in order to calculate the MonteCarlo estimate of the J function
-        for i in range(n_trajectories):
+        trajectory_loop = tqdm(range(n_trajectories), desc="Trajectories", leave=False)
+        for i in trajectory_loop:
+            # Swap starting player at the middle of the training
+            if i == int(n_trajectories/2):
+                self.player_id = -1
+                opponent.player_id = 1
             done = False
             rewards=[]
 
@@ -183,14 +192,14 @@ class SingleModelReinforce(ReinforceAgent):
             sum_lprob=0
             while not done:
                 agent_reward = 0
-                if self.player_id == 2:
-                    #au tour de l'adversaire si l'adversaire commence
-                    action=opponent.act(state)
+                if self.player_id == -1:
+                    # au tour de l'adversaire si l'adversaire commence
+                    action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
-
                     if done:
+                        rewards.append(agent_reward)
                         break
                     
                 state=torch.tensor(state, dtype=torch.float)
@@ -199,7 +208,6 @@ class SingleModelReinforce(ReinforceAgent):
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
                 t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
                 t_all_moves = self.model(state)
-
                 t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
                 # Softmax on legal moves
@@ -217,15 +225,15 @@ class SingleModelReinforce(ReinforceAgent):
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
 
-
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
-                    action = opponent.act(state)
+                    action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                 rewards.append(agent_reward)
+                
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
             reward_trajectories.append(self._compute_returns(rewards))
@@ -270,12 +278,219 @@ class SingleModelReinforce(ReinforceAgent):
        
         return reward_trajectories, loss
 
+    
+class TripleModelReinforce(ReinforceAgent):
+    '''
+    An agent that uses a single model to select its action
+    '''
+    def __init__(self, env, model_place, model_move, model_capture, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+        super(TripelModelReinforce, self).__init__(
+            env=env, 
+            epsilon=epsilon, 
+            gamma=gamma, 
+            win_reward=win_reward, 
+            defeat_reward=defeat_reward,
+            capture_reward=capture_reward, 
+            captured_reward=captured_reward,
+        )
+        self.lr = lr
+        self.model_place = model_place
+        self.model_move = model_place
+        self.model_capture = model_capture
+        
+        self.optimizer_place = torch.optim.Adam(self.model_place.parameters(), lr=lr)
+        self.optimizer_move = torch.optim.Adam(self.model_move.parameters(), lr=lr)
+        self.optimizer_capture = torch.optim.Adam(self.model_capture.parameters(), lr=lr)
+        
+        
+        
+        
+        #TO DO FAIRE DU LEARN ACT
+    def learned_act(self, s): #checker legal move + argmax
+        s=torch.tensor(s,dtype=torch.float)
+        legal_moves = self.env.board.get_legal_action_ids(self.player_id)
+        t_all_moves=np.array(self.model(s).detach())
+        t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
+        argm = np.argmax(t_legal_moves)
+        action = legal_moves[argm]
+
+        return(action) 
+               
+    def optimize_model(self, n_trajectories, opponent:MarelleAgent):
+      
+        reward_trajectories=[]
+        list_sum_proba=[]
+        
+        self.player_id = 1
+        opponent.player_id = -1
+        
+        trajectory_loop = tqdm(range(n_trajectories), desc="Trajectories", leave=False)
+        for i in trajectory_loop:
+            # Swap starting player at the middle of the training
+            if i == int(n_trajectories/2):
+                self.player_id = -1
+                opponent.player_id = 1
+            done = False
+            rewards=[]
+
+            state=self.env.reset()
+            state=torch.tensor(state, dtype=torch.float)
+            
+            sum_lprob=0
+            while not done:
+                agent_reward = 0
+                if self.player_id == -1:
+                    #au tour de l'adversaire si l'adversaire commence
+                    action=opponent.act(state, train=False)
+                    state, reward, done, info = self.env.step(action)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
+
+                    if done:
+                        rewards.append(agent_reward)
+                        break
+                    
+                state=torch.tensor(state, dtype=torch.float)
+
+                # au tour de l'agent
+                
+                
+                
+           
+                #env.board.place_token_intermediary_state((0, 1), 1) 
+                #env.board.move_token_intermediary_state(((0, 0), (0, 1), 1)
+                
+                ######
+                if self.en.board.phase=='place':
+                    #model place
+                    #redefinir le legal_moves_place
+                    #un parmi les 24 moves places
+                    
+                    legal_moves_place = self.env.board.get_legal_action_ids(self.player_id)
+                    t_legal_moves_place = torch.tensor(legal_moves_place, dtype=torch.int64)
+                    t_all_moves = self.model_place(state)
+                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_place)
+                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                    
+                    #action_id pour l'action hypothétique
+                    action_id = legal_moves[proba_id]
+                    
+                    log_prob_place = t_legal_moves_probas[proba_id].log()
+                    sum_log_prob_place+=log_prob_place
+                    
+                    
+                    if capture == True :
+                        #choix réseau sur state hypotéthique
+                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
+                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
+                         #Définir SHYP !!
+                        t_all_moves = self.models[2](s_hyp)
+                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
+                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                        action_id = legal_moves[proba_id]
+                        
+                        log_prob_capture = t_legal_moves_probas[proba_id].log()
+                        sum_log_prob_capture+=log_prob_capture
+                        
+                   
+                     
+                if self.env.board.phase == 'move':
+                    legal_moves_move = self.env.board.get_legal_action_ids(self.player_id)
+                    t_legal_moves_move = torch.tensor(legal_moves_move, dtype=torch.int64)
+                    t_all_moves = self.models[1](state)
+                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_move)
+                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                    action_id = legal_moves[proba_id]
+                     
+                    log_prob_move = t_legal_moves_probas[proba_id].log()
+                    sum_log_prob_move+=log_prob_move
+                    
+                    if capture == True :
+                        #choix réseau sur state hypotéthique
+                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
+                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
+                         #Définir SHYP !!
+                        t_all_moves = self.models[2](s_hyp)
+                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
+                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+                        action_id = legal_moves[proba_id]
+                        
+                        log_prob_capture = t_legal_moves_probas[proba_id].log()
+                        sum_log_prob_capture+=log_prob_capture
+                        
+                    
+               #DEFINIR L'ACTION AU FINAL
+            
+                # La proba est la proba du softmax des legal moves
+
+                state, reward, done, info =self.env.step(action_id)
+
+                agent_reward += reward["game_end"] * self.win_reward
+                agent_reward += reward["capture_token"] * self.capture_reward
+
+                # au tour de l'adversaire si agent commence
+                if self.player_id == 1 and not done:
+                    action = opponent.act(state, train=False)
+                    state, reward, done, info = self.env.step(action)
+                    agent_reward += reward["game_end"] * self.defeat_reward
+                    agent_reward += reward["capture_token"] * self.captured_reward
+
+                rewards.append(agent_reward)
+                
+           
+            list_sum_log_prob_place.append(sum_log_prob_place)
+            list_sum_log_prob_move.append(sum_log_prob_move)
+            list_sum_log_prob_capture.append(sum_log_prob_capture)
+            
+            reward_trajectories.append(self._compute_returns(rewards))
+        
+        loss_place=0
+        loss_move=0
+        loss_capture=0
+        
+        for i in range(len(list_sum_log_prob_place)):
+            loss_place+=-list_sum_log_prob_place[i]*reward_trajectories[i]
+            loss_move+=-list_sum_log_prob_move[i]*reward_trajectories[i]
+            loss_capture+=-list_sum_log_prob_capture[i]*reward_trajectories[i]
+        
+        loss_place=loss_place/len(list_sum_log_prob_place)
+        loss_move=loss_move/len(list_sum_log_prob_place)
+        loss_capture=loss_capture/len(list_sum_log_prob_place)
+        #print("loss",loss)
+        
+        # The following lines take care of the gradient descent step for the variable loss
+          
+        # Discard previous gradients
+        self.optimizer_place.zero_grad()
+        self.optimizer_move.zero_grad()
+        self.optimizer_capture.zero_grad()
+        
+        # Compute the gradient 
+        loss_place.backward()
+        loss_move.backward()
+        loss_capture.backward()
+       
+        # Do the gradient descent step
+        
+        #torch.nn.utils.clip_grad_norm_(self.model.parameters(), args.clip)
+        self.optimizer_place.step()
+        self.optimizer_move.step()
+        self.optimizer_capture.step()
+       
+       
+        return reward_trajectories, loss_place
 
 
+    
+    
 class RandomAgent(MarelleAgent):
     ''' An agent that plays randomly each turn'''
-    def __init__(self, env, player_id):
-        super(RandomAgent, self).__init__(env, player_id)
+    def __init__(self, env):
+        super(RandomAgent, self).__init__(env)
         pass
 
     def learned_act(self, s):
@@ -284,8 +499,8 @@ class RandomAgent(MarelleAgent):
 
 class BetterRandomAgent(MarelleAgent):
     '''An agent that captures if possible, then block if possible, then play randomly'''
-    def __init__(self, env, player_id):
-        super(BetterRandomAgent, self).__init__(env, player_id)
+    def __init__(self, env):
+        super(BetterRandomAgent, self).__init__(env)
         pass
 
     def learned_act(self, s):

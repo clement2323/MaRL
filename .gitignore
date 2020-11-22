@@ -145,3 +145,9 @@ cython_debug/
 
 # local files clem
 /clement
+
+# vscode
+/.vscode
+
+# debug files
+debug.py
