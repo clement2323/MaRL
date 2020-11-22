@@ -46,6 +46,9 @@ class ReinforceAgent(MarelleAgent):
         self.captured_reward = captured_reward
         self.model = None
 
+    def get_model_name(self):
+        raise NotImplementedError
+
     def act(self,s,train=True):
         """ This function should return the next action to do:
         an integer between 0 and 4 (not included) with a random exploration of epsilon"""
@@ -158,7 +161,10 @@ class SingleModelReinforce(ReinforceAgent):
         self.lr = lr
         self.model = model
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        
+
+    def get_model_name(self):
+        return self.model.__class__.__name__
+
     def learned_act(self, s): #checker legal move + argmax
         s=torch.tensor(s,dtype=torch.float)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
@@ -303,7 +309,8 @@ class TripleModelReinforce(ReinforceAgent):
         self.optimizer_capture = torch.optim.Adam(self.model_capture.parameters(), lr=lr)
         
         
-        
+    def get_model_name(self):
+        return f"place : {self.model_place.__class__.__name__} - move : {self.model_move.__class__.__name__} - capture : {self.model_capture.__class__.__name__}"
         
         #TO DO FAIRE DU LEARN ACT
     def learned_act(self, s): #checker legal move + argmax

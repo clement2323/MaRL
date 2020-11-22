@@ -27,6 +27,7 @@ def train_agent(
         wandb.config.captured_reward = trained_agent.captured_reward
         wandb.config.lr = trained_agent.lr
         wandb.config.optimizer_name = trained_agent.optimizer.__class__.__name__
+        wandb.config.model_name = trained_agent.get_model_name()
         
         # Opponent agent
         wandb.config.opponent_agent = opponent_agent.__class__.__name__
