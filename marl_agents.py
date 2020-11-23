@@ -176,8 +176,8 @@ class SingleModelReinforce(ReinforceAgent):
     def learned_act(self, s): #checker legal move + argmax
         s=torch.tensor(s,dtype=torch.float).to(device)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-        t_all_moves=np.array(self.model(s).detach())
-        t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
+        all_moves=np.array(self.model(s).detach().cpu())
+        t_legal_moves =[all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
         argm = np.argmax(t_legal_moves)
         action = legal_moves[argm]
 
