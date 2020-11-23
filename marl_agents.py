@@ -12,6 +12,13 @@ import wandb
 import os
 from tqdm import tqdm_notebook as tqdm
 
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+    print("Using GPU")
+else:
+    device = torch.device("cpu")
+    print("WARNING: CPU only, this will be slow!")
+
 class MarelleAgent(object):
     '''
     A basic marelle agent class for both RL and non RL AIs
@@ -160,13 +167,14 @@ class SingleModelReinforce(ReinforceAgent):
         )
         self.lr = lr
         self.model = model
+        self.model.to(device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
     def get_model_name(self):
         return self.model.__class__.__name__
 
     def learned_act(self, s): #checker legal move + argmax
-        s=torch.tensor(s,dtype=torch.float)
+        s=torch.tensor(s,dtype=torch.float).to(device)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
         t_all_moves=np.array(self.model(s).detach())
         t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
@@ -193,7 +201,7 @@ class SingleModelReinforce(ReinforceAgent):
             rewards=[]
 
             state=self.env.reset()
-            state=torch.tensor(state, dtype=torch.float)
+            state=torch.tensor(state, dtype=torch.float).to(device)
             
             sum_lprob=0
             while not done:
@@ -202,14 +210,13 @@ class SingleModelReinforce(ReinforceAgent):
                     # au tour de l'adversaire si l'adversaire commence
                     action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
+                    state = torch.tensor(state, dtype=torch.float).to(device)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
                     if done:
                         rewards.append(agent_reward)
                         break
                     
-                state=torch.tensor(state, dtype=torch.float)
-
                 # au tour de l'agent
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
                 t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
@@ -227,6 +234,7 @@ class SingleModelReinforce(ReinforceAgent):
                 sum_lprob+= lprob
                 
                 state, reward, done, info =self.env.step(action_id)
+                state = torch.tensor(state, dtype=torch.float).to(device)
 
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
@@ -235,6 +243,7 @@ class SingleModelReinforce(ReinforceAgent):
                 if self.player_id == 1 and not done:
                     action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
+                    state = torch.tensor(state, dtype=torch.float).to(device)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
 
@@ -267,13 +276,13 @@ class SingleModelReinforce(ReinforceAgent):
        
         # Do the gradient descent step
         casse=False
-        for index, weight in enumerate(self.model.parameters()):
-            gradient, *_ = weight.grad.data
-            gradient=torch.isfinite(gradient)
-            #print(gradient)
-            gradient=np.array(gradient)
-            if np.any(gradient) == False :
-                casse=True
+        # for index, weight in enumerate(self.model.parameters()):
+        #     gradient, *_ = weight.grad.data
+        #     gradient=torch.isfinite(gradient)
+        #     #print(gradient)
+        #     gradient=np.array(gradient)
+        #     if np.any(gradient) == False :
+        #         casse=True
             #print(f"Gradient of w{index} w.r.t to L: {gradient}")
               
         #torch.nn.utils.clip_grad_norm_(self.model.parameters(), args.clip)
