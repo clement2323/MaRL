@@ -4,6 +4,13 @@ import torch.nn.functional as F
 from torch import optim
 import numpy as np
 
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+    print("Using GPU")
+else:
+    device = torch.device("cpu")
+    print("WARNING: CPU only, this will be slow!")
+
 class FCModel(nn.Module):
     def __init__(self, dim_observation, n_actions):
         super(FCModel, self).__init__()
@@ -41,7 +48,7 @@ class ConvModel(nn.Module):
     
     def transform_input_to_mat(self,state):
         
-        vec_s=np.array(state.detach())     
+        vec_s=np.array(state.detach().cpu())     
         s=[]
         
         for u in vec_s:
@@ -80,7 +87,7 @@ class ConvModel(nn.Module):
         mat_state[6,3]=s[22]
         mat_state[6,6]=s[23]
     
-        return(torch.tensor(mat_state.reshape(1,1,7,7),dtype=torch.float))
+        return torch.tensor(mat_state.reshape(1,1,7,7),dtype=torch.float).to(device)
 
     def forward(self, x):   
         
