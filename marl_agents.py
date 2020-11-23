@@ -219,7 +219,7 @@ class SingleModelReinforce(ReinforceAgent):
                     
                 # au tour de l'agent
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
+                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64).to(device)
                 t_all_moves = self.model(state)
                 t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
