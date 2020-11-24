@@ -421,7 +421,7 @@ class TripleModelReinforce(ReinforceAgent):
                 #print(self.env.board.phase)
                 #print(value_all_intermediary_actions)
                 #print(legal_intermediary_actions_id)
-                value_legal_intermediary_actions = torch.index_select(value_all_intermediary_actions, 0, torch.tensor(legal_intermediary_actions_id,dtype=torch.int64))
+                value_legal_intermediary_actions = torch.index_select(value_all_intermediary_actions, 0, torch.tensor(legal_intermediary_actions_id,dtype=torch.int64).to(device))
 
                 legal_intermediary_actions_probas = nn.Softmax(dim=0)(value_legal_intermediary_actions)
                 proba_id = int(torch.multinomial(legal_intermediary_actions_probas, 1))
