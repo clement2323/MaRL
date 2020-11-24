@@ -313,6 +313,9 @@ class TripleModelReinforce(ReinforceAgent):
         self.model_move = model_move
         self.model_capture = model_capture
         
+        self.model_place.to(device)
+        self.model_move.to(device)
+        self.model_capture.to(device)
         self.optimizer_place = torch.optim.Adam(self.model_place.parameters(), lr=lr)
         self.optimizer_move = torch.optim.Adam(self.model_move.parameters(), lr=lr)
         self.optimizer_capture = torch.optim.Adam(self.model_capture.parameters(), lr=lr)
@@ -323,7 +326,7 @@ class TripleModelReinforce(ReinforceAgent):
         
         #TO DO FAIRE DU LEARN ACT
     def learned_act(self, s): #checker legal move + argmax
-        s=torch.tensor(s,dtype=torch.float)
+        s=torch.tensor(s,dtype=torch.float).to(device)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
         t_all_moves=np.array(self.model(s).detach())
         t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
@@ -355,7 +358,7 @@ class TripleModelReinforce(ReinforceAgent):
             rewards=[]
 
             state=self.env.reset()
-            state=torch.tensor(state, dtype=torch.float)
+            state=torch.tensor(state, dtype=torch.float).to(device)
             
            
             sum_log_prob_place=0
@@ -378,7 +381,7 @@ class TripleModelReinforce(ReinforceAgent):
                         rewards.append(agent_reward)
                         break
                     
-                state=torch.tensor(state, dtype=torch.float)
+                state=torch.tensor(state, dtype=torch.float).to(device)
 
                 # au tour de l'agent
              
@@ -408,10 +411,10 @@ class TripleModelReinforce(ReinforceAgent):
                 #model_move=ConvModel_small_output(32)
                 
                 if self.env.board.phase=='place':  
-                    value_all_intermediary_actions=self.model_place(state) 
+                    value_all_intermediary_actions=self.model_place(state)
                     n_place+=1
                 if self.env.board.phase=='move':  
-                    value_all_intermediary_actions=self.model_move(state) 
+                    value_all_intermediary_actions=self.model_move(state)
                     n_move+=1
                     #print("lol")
                 

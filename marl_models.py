@@ -158,7 +158,7 @@ class ConvModel_small_output(nn.Module):
         mat_state[6,3]=s[22]
         mat_state[6,6]=s[23]
     
-        return(torch.tensor(mat_state.reshape(1,1,7,7),dtype=torch.float))
+        return(torch.tensor(mat_state.reshape(1,1,7,7),dtype=torch.float).to(device))
 
 
     def forward(self, u):   
