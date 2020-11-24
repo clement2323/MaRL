@@ -447,7 +447,7 @@ class TripleModelReinforce(ReinforceAgent):
                         intermediate_s = self.env.board.move_token_intermediary_state(selected_intermediary_move, self.player_id)
                     
                     value_all_capture=self.model_capture(torch.tensor(intermediate_s,dtype=torch.float)) 
-                    value_legal_capture = torch.index_select(value_all_capture, 0, torch.tensor(legal_capture_actions_id,dtype=torch.int64))
+                    value_legal_capture = torch.index_select(value_all_capture, 0, torch.tensor(legal_capture_actions_id,dtype=torch.int64).to(device))
                     legal_capture_actions_probas = nn.Softmax(dim=0)(value_legal_capture)
                     proba_id = int(torch.multinomial(legal_capture_actions_probas, 1))
                     selected_capture=legal_capture_actions[proba_id]
