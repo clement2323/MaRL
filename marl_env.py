@@ -124,6 +124,41 @@ class MarelleBoard():
         
         self.id_to_action = id_to_action
         self.action_to_id = action_to_id
+        
+        #AJOUT POUR TRIPLE AGENT
+ 
+        #creation d'un dictionnaire de intermediary_place to place_id
+        place_action_list=self.place_token_action_list
+        tuple_1 = [a[0] for a in place_action_list] #NONE ? 
+
+        id_to_place_action = {i:j  for i, j in enumerate(list(dict.fromkeys(tuple_1)))}
+        place_action_to_id = {j:i  for i, j in id_to_place_action.items()}
+        
+        self.id_to_place_action = id_to_place_action
+        self.place_action_to_id = place_action_to_id
+        #creation d'un dictionnaire de intermediary_move to move_id
+        move_action_list=self.move_token_action_list
+        tuple_1 = [a[0] for a in move_action_list] #NONE ? 
+
+        id_to_move_action = {i:j  for i, j in enumerate(list(dict.fromkeys(tuple_1)))}
+        move_action_to_id = {j:i  for i, j in id_to_move_action.items()}
+        
+        self.id_to_move_action = id_to_move_action
+        self.move_action_to_id = move_action_to_id
+        #captures to id
+        compteur=0
+        capture_to_id = {} 
+        id_to_capture = {}
+
+        for i in range(3):
+            for j in range(8):
+                id_to_capture[compteur]= (i,j)
+                compteur+=1
+        capture_to_id = {j:i for i,j in id_to_capture.items()}
+
+        self.id_to_capture = id_to_capture
+        self.capture_to_id = capture_to_id
+
         self.initialize_game()
 
 

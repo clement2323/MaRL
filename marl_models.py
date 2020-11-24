@@ -112,19 +112,21 @@ class ConvModel_small_output(nn.Module):
         self.n_actions=n_actions
         self.conv1 = nn.Conv2d(1, 32, kernel_size=3)
         self.conv2 = nn.Conv2d(32,8, kernel_size=3)
-        self.fc1 = nn.Linear(24, n_actions)
+        self.fc1 = nn.Linear(72, n_actions)
        
    
     def transform_input_to_mat(self,state):
         
         vec_s=np.array(state.detach())     
-        s=[]
+        s=vec_s
+       
+       # s=[]
         
-        for u in vec_s:
-            if u==0:
-                s.append(-3)
-            else:
-                s.append(u)
+        #for u in vec_s:
+         #   if u==0:
+          #      s.append(-3)
+           # else:
+            #    s.append(u)
         mat_state=np.ones((7,7))*(-3)
         mat_state[3,4]=s[0]
         mat_state[2,4]=s[1]
@@ -164,7 +166,7 @@ class ConvModel_small_output(nn.Module):
         x=self.transform_input_to_mat(u)        
         x = F.relu(self.conv1(x), 2)
         x = F.relu(self.conv2(x), 2)
-        print(x.shape[0]*x.shape[1]*x.shape[2])
-        x = x.view(-1, 24)
+        #print(x.shape[3]*x.shape[1]*x.shape[2])
+        x = x.view(-1, 72)
         #x = F.relu(self.fc1(x))
-        return self.fc1(x)    
+        return self.fc1(x)[0]   

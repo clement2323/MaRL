@@ -299,7 +299,7 @@ class TripleModelReinforce(ReinforceAgent):
     An agent that uses a single model to select its action
     '''
     def __init__(self, env, model_place, model_move, model_capture, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
-        super(TripelModelReinforce, self).__init__(
+        super(TripleModelReinforce, self).__init__(
             env=env, 
             epsilon=epsilon, 
             gamma=gamma, 
@@ -310,7 +310,7 @@ class TripleModelReinforce(ReinforceAgent):
         )
         self.lr = lr
         self.model_place = model_place
-        self.model_move = model_place
+        self.model_move = model_move
         self.model_capture = model_capture
         
         self.optimizer_place = torch.optim.Adam(self.model_place.parameters(), lr=lr)
@@ -335,8 +335,13 @@ class TripleModelReinforce(ReinforceAgent):
     def optimize_model(self, n_trajectories, opponent:MarelleAgent):
       
         reward_trajectories=[]
-        list_sum_proba=[]
+        list_sum_log_prob_place=[]
+        list_sum_log_prob_move=[]
+        list_sum_log_prob_capture=[]
         
+        list_n_place=[]
+        list_n_move=[]
+        list_n_capture=[]
         self.player_id = 1
         opponent.player_id = -1
         
@@ -352,7 +357,14 @@ class TripleModelReinforce(ReinforceAgent):
             state=self.env.reset()
             state=torch.tensor(state, dtype=torch.float)
             
-            sum_lprob=0
+           
+            sum_log_prob_place=0
+            sum_log_prob_move=0
+            sum_log_prob_capture=0
+            
+            n_place=1
+            n_move=1
+            n_capture=1
             while not done:
                 agent_reward = 0
                 if self.player_id == -1:
@@ -369,81 +381,83 @@ class TripleModelReinforce(ReinforceAgent):
                 state=torch.tensor(state, dtype=torch.float)
 
                 # au tour de l'agent
-                
-                
-                
-           
+             
                 #env.board.place_token_intermediary_state((0, 1), 1) 
                 #env.board.move_token_intermediary_state(((0, 0), (0, 1), 1)
-                
-                ######
-                if self.en.board.phase=='place':
-                    #model place
-                    #redefinir le legal_moves_place
-                    #un parmi les 24 moves places
-                    
-                    legal_moves_place = self.env.board.get_legal_action_ids(self.player_id)
-                    t_legal_moves_place = torch.tensor(legal_moves_place, dtype=torch.int64)
-                    t_all_moves = self.model_place(state)
-                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_place)
-                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                    
-                    #action_id pour l'action hypothétique
-                    action_id = legal_moves[proba_id]
-                    
-                    log_prob_place = t_legal_moves_probas[proba_id].log()
-                    sum_log_prob_place+=log_prob_place
-                    
-                    
-                    if capture == True :
-                        #choix réseau sur state hypotéthique
-                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
-                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
-                         #Définir SHYP !!
-                        t_all_moves = self.models[2](s_hyp)
-                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
-                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                        action_id = legal_moves[proba_id]
-                        
-                        log_prob_capture = t_legal_moves_probas[proba_id].log()
-                        sum_log_prob_capture+=log_prob_capture
-                        
-                   
-                     
-                if self.env.board.phase == 'move':
-                    legal_moves_move = self.env.board.get_legal_action_ids(self.player_id)
-                    t_legal_moves_move = torch.tensor(legal_moves_move, dtype=torch.int64)
-                    t_all_moves = self.models[1](state)
-                    t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_move)
-                    t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-                    proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                    action_id = legal_moves[proba_id]
-                     
-                    log_prob_move = t_legal_moves_probas[proba_id].log()
-                    sum_log_prob_move+=log_prob_move
-                    
-                    if capture == True :
-                        #choix réseau sur state hypotéthique
-                        legal_moves_capture = self.env.board.get_legal_action_ids(self.player_id)
-                        t_legal_moves_capture = torch.tensor(legal_moves_capture, dtype=torch.int64)
-                         #Définir SHYP !!
-                        t_all_moves = self.models[2](s_hyp)
-                        t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves_capture)
-                        t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-                        proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                        action_id = legal_moves[proba_id]
-                        
-                        log_prob_capture = t_legal_moves_probas[proba_id].log()
-                        sum_log_prob_capture+=log_prob_capture
-                        
-                    
-               #DEFINIR L'ACTION AU FINAL
-            
-                # La proba est la proba du softmax des legal moves
+               
+                def split(a,b):
+                    return({k: list(zip(*g))[1] for k, g in itertools.groupby(sorted(zip(b,a)), lambda x: list(x)[0])})
 
-                state, reward, done, info =self.env.step(action_id)
+                #####     
+                
+                legal_actions=self.env.board.get_legal_actions(self.player_id)
+                tuple_1_legal_actions = [a[0] for a in legal_actions if not a[1] == None]
+                tuple_2_legal_actions = [a[1] for a in legal_actions if not a[1] == None]
+
+                #move to capture possibles quand il y a des captures possibles
+                legal_intermediary_actions_to_capture=split(tuple_2_legal_actions,tuple_1_legal_actions) #dico
+
+                legal_intermediary_actions=list(dict.fromkeys([a[0] for a in legal_actions])) 
+                
+                if self.env.board.phase=='place': 
+                    legal_intermediary_actions_id=[l for k,l in self.env.board.place_action_to_id.items() if k in legal_intermediary_actions]
+                if self.env.board.phase=='move': 
+                    legal_intermediary_actions_id=[l for k,l in self.env.board.move_action_to_id.items() if k in legal_intermediary_actions]
+                    
+                #model_place=ConvModel_small_output(24)
+                #model_move=ConvModel_small_output(32)
+                
+                if self.env.board.phase=='place':  
+                    value_all_intermediary_actions=self.model_place(state) 
+                    n_place+=1
+                if self.env.board.phase=='move':  
+                    value_all_intermediary_actions=self.model_move(state) 
+                    n_move+=1
+                    #print("lol")
+                
+                #print(self.env.board.phase)
+                #print(value_all_intermediary_actions)
+                #print(legal_intermediary_actions_id)
+                value_legal_intermediary_actions = torch.index_select(value_all_intermediary_actions, 0, torch.tensor(legal_intermediary_actions_id,dtype=torch.int64))
+
+                legal_intermediary_actions_probas = nn.Softmax(dim=0)(value_legal_intermediary_actions)
+                proba_id = int(torch.multinomial(legal_intermediary_actions_probas, 1))
+                
+                
+                if self.env.board.phase=='place':  
+                    sum_log_prob_place+=legal_intermediary_actions_probas[proba_id].log()
+                if self.env.board.phase=='move':  
+                    sum_log_prob_move+=legal_intermediary_actions_probas[proba_id].log()
+                    
+     
+                selected_intermediary_move=legal_intermediary_actions[proba_id] # c'est vraiment un move qui a été choisi ici pas un id
+                
+                # si le selected move n'est pas dans la liste alors il n'ya pas de capture.
+                if selected_intermediary_move in legal_intermediary_actions_to_capture.keys():   # dans ce cas capture
+                    n_capture+=1
+                    legal_capture_actions = legal_intermediary_actions_to_capture[selected_intermediary_move]
+                    legal_capture_actions_id = [self.env.board.capture_to_id[k] for k in legal_capture_actions]
+
+                    if self.env.board.phase=='place':  
+                        intermediate_s = self.env.board.place_token_intermediary_state(selected_intermediary_move, self.player_id)
+                    if self.env.board.phase=='move':  
+                        intermediate_s = self.env.board.move_token_intermediary_state(selected_intermediary_move, self.player_id)
+                    
+                    value_all_capture=self.model_capture(torch.tensor(intermediate_s,dtype=torch.float)) 
+                    value_legal_capture = torch.index_select(value_all_capture, 0, torch.tensor(legal_capture_actions_id,dtype=torch.int64))
+                    legal_capture_actions_probas = nn.Softmax(dim=0)(value_legal_capture)
+                    proba_id = int(torch.multinomial(legal_capture_actions_probas, 1))
+                    selected_capture=legal_capture_actions[proba_id]
+                    
+                    selected_action=(selected_intermediary_move,selected_capture)
+                    sum_log_prob_capture+=legal_capture_actions_probas[proba_id].log()
+                            
+                else: 
+                    selected_action=(selected_intermediary_move,None)
+                
+                #Définition de l'action finale
+                selected_action_id = self.env.board.action_to_id[selected_action]
+                state, reward, done, info =self.env.step(selected_action_id)
 
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
@@ -462,6 +476,10 @@ class TripleModelReinforce(ReinforceAgent):
             list_sum_log_prob_move.append(sum_log_prob_move)
             list_sum_log_prob_capture.append(sum_log_prob_capture)
             
+            list_n_place.append(n_place)
+            list_n_move.append(n_move)
+            list_n_capture.append(n_capture)
+            
             reward_trajectories.append(self._compute_returns(rewards))
         
         loss_place=0
@@ -469,10 +487,11 @@ class TripleModelReinforce(ReinforceAgent):
         loss_capture=0
         
         for i in range(len(list_sum_log_prob_place)):
-            loss_place+=-list_sum_log_prob_place[i]*reward_trajectories[i]
-            loss_move+=-list_sum_log_prob_move[i]*reward_trajectories[i]
-            loss_capture+=-list_sum_log_prob_capture[i]*reward_trajectories[i]
+            loss_place+=-list_sum_log_prob_place[i]*reward_trajectories[i]*(1/list_n_place[i])
+            loss_move+=-list_sum_log_prob_move[i]*reward_trajectories[i]*(1/list_n_move[i])
+            loss_capture+=-list_sum_log_prob_capture[i]*reward_trajectories[i]*(1/list_n_capture[i])
         
+        #PAs forcement utile de diviser ? -> Oui vu que le nolbre de trajectoire reste fixe
         loss_place=loss_place/len(list_sum_log_prob_place)
         loss_move=loss_move/len(list_sum_log_prob_place)
         loss_capture=loss_capture/len(list_sum_log_prob_place)
