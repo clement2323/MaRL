@@ -17,7 +17,7 @@ class MarelleGymEnv(gym.Env):
         self.N_STATE = 24 # 24 positions
         self.N_PLACE_ACTIONS = 24 # 24 positions
         self.N_PLACE_CAPTURE_ACTIONS = 24 # 23 captures + 1 non capture
-        self.N_MOVE_ACTIONS = 32 # 36 edges
+        self.N_MOVE_ACTIONS = 32 # 32 edges
         self.N_MOVE_CAPTURE_ACTIONS = 25 # 24 captures + 1 non capture
         self.N_TOTAL_PLACE_ACTIONS = self.N_PLACE_ACTIONS * self.N_PLACE_CAPTURE_ACTIONS
         self.N_TOTAL_MOVE_CAPTURE_ACTIONS = self.N_MOVE_ACTIONS * self.N_MOVE_CAPTURE_ACTIONS

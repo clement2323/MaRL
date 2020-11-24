@@ -12,6 +12,13 @@ import wandb
 import os
 from tqdm import tqdm_notebook as tqdm
 
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+    print("Using GPU")
+else:
+    device = torch.device("cpu")
+    print("WARNING: CPU only, this will be slow!")
+
 class MarelleAgent(object):
     '''
     A basic marelle agent class for both RL and non RL AIs
@@ -27,7 +34,7 @@ class MarelleAgent(object):
         self.n_total_move_actions = self.move_actions * self.move_capture_actions
         self.player_id = 0
 
-    def act(self, state, train=False):
+    def act(self, state, train=True):
         return self.learned_act(state)
 
     def learned_act(self, state):
@@ -46,12 +53,16 @@ class ReinforceAgent(MarelleAgent):
         self.captured_reward = captured_reward
         self.model = None
 
+    def get_model_name(self):
+        raise NotImplementedError
+
     def act(self,s,train=True):
         """ This function should return the next action to do:
         an integer between 0 and 4 (not included) with a random exploration of epsilon"""
         if train:
             if np.random.rand() <= self.epsilon:
                 a = np.random.choice(self.env.board.get_legal_action_ids(self.player_id))
+
             else:
                 a = self.learned_act(s)
         else: # in some cases, this can improve the performance.. remove it if poor performances
@@ -156,13 +167,17 @@ class SingleModelReinforce(ReinforceAgent):
         )
         self.lr = lr
         self.model = model
+        self.model.to(device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        
+
+    def get_model_name(self):
+        return self.model.__class__.__name__
+
     def learned_act(self, s): #checker legal move + argmax
-        s=torch.tensor(s,dtype=torch.float)
+        s=torch.tensor(s,dtype=torch.float).to(device)
         legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-        t_all_moves=np.array(self.model(s).detach())
-        t_legal_moves =[t_all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
+        all_moves=np.array(self.model(s).detach().cpu())
+        t_legal_moves =[all_moves[legal_move] for legal_move in legal_moves] #pas besoin de softmaxiser ici
         argm = np.argmax(t_legal_moves)
         action = legal_moves[argm]
 
@@ -186,7 +201,7 @@ class SingleModelReinforce(ReinforceAgent):
             rewards=[]
 
             state=self.env.reset()
-            state=torch.tensor(state, dtype=torch.float)
+            state=torch.tensor(state, dtype=torch.float).to(device)
             
             sum_lprob=0
             while not done:
@@ -195,18 +210,16 @@ class SingleModelReinforce(ReinforceAgent):
                     # au tour de l'adversaire si l'adversaire commence
                     action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
+                    state = torch.tensor(state, dtype=torch.float).to(device)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
-
                     if done:
                         rewards.append(agent_reward)
                         break
                     
-                state=torch.tensor(state, dtype=torch.float)
-
                 # au tour de l'agent
                 legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64)
+                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64).to(device)
                 t_all_moves = self.model(state)
                 t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
                 
@@ -221,19 +234,21 @@ class SingleModelReinforce(ReinforceAgent):
                 sum_lprob+= lprob
                 
                 state, reward, done, info =self.env.step(action_id)
+                state = torch.tensor(state, dtype=torch.float).to(device)
 
                 agent_reward += reward["game_end"] * self.win_reward
                 agent_reward += reward["capture_token"] * self.capture_reward
-
 
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
                     action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
+                    state = torch.tensor(state, dtype=torch.float).to(device)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
 
                 rewards.append(agent_reward)
+                
             #print("sumlprob",sum_lprob)
             list_sum_proba.append(sum_lprob)
             reward_trajectories.append(self._compute_returns(rewards))
@@ -261,13 +276,13 @@ class SingleModelReinforce(ReinforceAgent):
        
         # Do the gradient descent step
         casse=False
-        for index, weight in enumerate(self.model.parameters()):
-            gradient, *_ = weight.grad.data
-            gradient=torch.isfinite(gradient)
-            #print(gradient)
-            gradient=np.array(gradient)
-            if np.any(gradient) == False :
-                casse=True
+        # for index, weight in enumerate(self.model.parameters()):
+        #     gradient, *_ = weight.grad.data
+        #     gradient=torch.isfinite(gradient)
+        #     #print(gradient)
+        #     gradient=np.array(gradient)
+        #     if np.any(gradient) == False :
+        #         casse=True
             #print(f"Gradient of w{index} w.r.t to L: {gradient}")
               
         #torch.nn.utils.clip_grad_norm_(self.model.parameters(), args.clip)
@@ -303,7 +318,8 @@ class TripleModelReinforce(ReinforceAgent):
         self.optimizer_capture = torch.optim.Adam(self.model_capture.parameters(), lr=lr)
         
         
-        
+    def get_model_name(self):
+        return f"place : {self.model_place.__class__.__name__} - move : {self.model_move.__class__.__name__} - capture : {self.model_capture.__class__.__name__}"
         
         #TO DO FAIRE DU LEARN ACT
     def learned_act(self, s): #checker legal move + argmax
@@ -353,7 +369,7 @@ class TripleModelReinforce(ReinforceAgent):
                 agent_reward = 0
                 if self.player_id == -1:
                     #au tour de l'adversaire si l'adversaire commence
-                    action=opponent.act(state)
+                    action=opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
@@ -448,7 +464,7 @@ class TripleModelReinforce(ReinforceAgent):
 
                 # au tour de l'adversaire si agent commence
                 if self.player_id == 1 and not done:
-                    action = opponent.act(state)
+                    action = opponent.act(state, train=False)
                     state, reward, done, info = self.env.step(action)
                     agent_reward += reward["game_end"] * self.defeat_reward
                     agent_reward += reward["capture_token"] * self.captured_reward
