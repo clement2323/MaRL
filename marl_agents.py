@@ -11,13 +11,13 @@ import seaborn as sns
 import wandb
 import os
 from tqdm import tqdm_notebook as tqdm
+import multiprocessing
+
 
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
-    print("Using GPU")
 else:
     device = torch.device("cpu")
-    print("WARNING: CPU only, this will be slow!")
 
 class MarelleAgent(object):
     '''
@@ -43,8 +43,10 @@ class MarelleAgent(object):
 
 class ReinforceAgent(MarelleAgent):
     ''' This class encapsulates all agents that perform reinforcement training'''
-    def __init__(self, env, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
+    def __init__(self, env, env_builder, opponent_builder, epsilon=0, gamma=1,  win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1):
         super(ReinforceAgent, self).__init__(env)
+        self.env_builder = env_builder
+        self.opponent_builder = opponent_builder
         self.epsilon = epsilon
         self.gamma = gamma
         self.win_reward = win_reward
@@ -155,9 +157,11 @@ class SingleModelReinforce(ReinforceAgent):
     '''
     An agent that uses a single model to select its action
     '''
-    def __init__(self, env, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
+    def __init__(self, env, env_builder, opponent_builder, model, lr, win_reward=1, defeat_reward=-1, capture_reward=0.1, captured_reward=-0.1, epsilon=0, gamma=1):
         super(SingleModelReinforce, self).__init__(
-            env=env, 
+            env=env,
+            env_builder=env_builder,
+            opponent_builder=opponent_builder,
             epsilon=epsilon, 
             gamma=gamma, 
             win_reward=win_reward, 
@@ -181,93 +185,35 @@ class SingleModelReinforce(ReinforceAgent):
         argm = np.argmax(t_legal_moves)
         action = legal_moves[argm]
 
-        return(action) 
-               
+        return(action)
+    
     def optimize_model(self, n_trajectories, opponent:MarelleAgent):
-      
+        
+        # moving model to cpu to parralelize computations
+        self.model.to(torch.device("cpu"))
         reward_trajectories=[]
         list_sum_proba=[]
-
-        self.player_id = 1
-        opponent.player_id = -1
-        
+                
         trajectory_loop = tqdm(range(n_trajectories), desc="Trajectories", leave=False)
-        for i in trajectory_loop:
-            # Swap starting player at the middle of the training
-            if i == int(n_trajectories/2):
-                self.player_id = -1
-                opponent.player_id = 1
-            done = False
-            rewards=[]
-
-            state=self.env.reset()
-            state=torch.tensor(state, dtype=torch.float).to(device)
-            
-            sum_lprob=0
-            while not done:
-                agent_reward = 0
-                if self.player_id == -1:
-                    # au tour de l'adversaire si l'adversaire commence
-                    action=opponent.act(state, train=False)
-                    state, reward, done, info = self.env.step(action)
-                    state = torch.tensor(state, dtype=torch.float).to(device)
-                    agent_reward += reward["game_end"] * self.defeat_reward
-                    agent_reward += reward["capture_token"] * self.captured_reward
-                    if done:
-                        rewards.append(agent_reward)
-                        break
-                    
-                # au tour de l'agent
-                legal_moves = self.env.board.get_legal_action_ids(self.player_id)
-                t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64).to(device)
-                t_all_moves = self.model(state)
-                t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
-                
-                # Softmax on legal moves
-                t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
-
-                proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
-                action_id = legal_moves[proba_id]
-                
-                # La proba est la proba du softmax des legal moves
-                lprob = t_legal_moves_probas[proba_id].log()
-                sum_lprob+= lprob
-                
-                state, reward, done, info =self.env.step(action_id)
-                state = torch.tensor(state, dtype=torch.float).to(device)
-
-                agent_reward += reward["game_end"] * self.win_reward
-                agent_reward += reward["capture_token"] * self.capture_reward
-
-                # au tour de l'adversaire si agent commence
-                if self.player_id == 1 and not done:
-                    action = opponent.act(state, train=False)
-                    state, reward, done, info = self.env.step(action)
-                    state = torch.tensor(state, dtype=torch.float).to(device)
-                    agent_reward += reward["game_end"] * self.defeat_reward
-                    agent_reward += reward["capture_token"] * self.captured_reward
-
-                rewards.append(agent_reward)
-                
-            #print("sumlprob",sum_lprob)
-            list_sum_proba.append(sum_lprob)
-            reward_trajectories.append(self._compute_returns(rewards))
+        pool = multiprocessing.Pool(4)
+        trajectory_results = pool.starmap(self.compute_trajectory, [(n_trajectories, i) for i in trajectory_loop])
+        pool.close()
+        pool.join()
         
+        list_sum_proba = [trajectory_result[0] for trajectory_result in trajectory_results]
+        reward_trajectories = [trajectory_result[1] for trajectory_result in trajectory_results]
+
+        self.model.to(device)
+
         loss=0
         
-        #print("vecteur sum prob pour chaque trajectoire")
-        #t_s_p=np.array([l.detach() for l in list_sum_proba])
-        #print("max",np.max(t_s_p))
-        #print("min",np.min(t_s_p))
-        
         for i in range(len(list_sum_proba)):
-            loss+=-list_sum_proba[i]*reward_trajectories[i]
+            loss+=-list_sum_proba[i]*reward_trajectories[i].to(device)
         
         loss=loss/len(list_sum_proba)
-        #print("loss",loss)
+       
         
         # The following lines take care of the gradient descent step for the variable loss
-          
         # Discard previous gradients
         self.optimizer.zero_grad()
         
@@ -292,6 +238,69 @@ class SingleModelReinforce(ReinforceAgent):
             self.optimizer.step()
        
         return reward_trajectories, loss
+    
+    def compute_trajectory(self, n_trajectories, trajectory_id):
+        if trajectory_id < int(n_trajectories/2):
+            player_id = 1
+            opponent_id = -1
+        else:
+            player_id = -1
+            opponent_id = 1
+        
+        done = False
+        rewards=[]
+
+        env = self.env_builder()
+        opponent = self.opponent_builder(env)
+        state = torch.tensor(env.board.get_state(), dtype=torch.float).cpu()
+        
+        sum_lprob=0
+        while not done:
+            agent_reward = 0
+            if player_id == -1:
+                # au tour de l'adversaire si l'adversaire commence
+                action=opponent.act(state, train=False)
+                state, reward, done, info = env.step(action)
+                state = torch.tensor(state, dtype=torch.float).cpu()
+                agent_reward += reward["game_end"] * self.defeat_reward
+                agent_reward += reward["capture_token"] * self.captured_reward
+                if done:
+                    rewards.append(agent_reward)
+                    break
+                
+            # au tour de l'agent
+            legal_moves = env.board.get_legal_action_ids(player_id)
+            t_legal_moves = torch.tensor(legal_moves, dtype=torch.int64).cpu()
+            t_all_moves = self.model(state)
+            t_legal_moves_scores = torch.index_select(t_all_moves, 0, t_legal_moves)
+            
+            # Softmax on legal moves
+            t_legal_moves_probas = nn.Softmax(dim=0)(t_legal_moves_scores)
+
+            proba_id = int(torch.multinomial(t_legal_moves_probas, 1))
+            action_id = legal_moves[proba_id]
+            
+            # La proba est la proba du softmax des legal moves
+            lprob = t_legal_moves_probas[proba_id].log()
+            sum_lprob+= lprob
+            
+            state, reward, done, info = env.step(action_id)
+            state = torch.tensor(state, dtype=torch.float).to(device)
+
+            agent_reward += reward["game_end"] * self.win_reward
+            agent_reward += reward["capture_token"] * self.capture_reward
+
+            # au tour de l'adversaire si agent commence
+            if player_id == 1 and not done:
+                action = opponent.act(state, train=False)
+                state, reward, done, info = env.step(action)
+                state = torch.tensor(state, dtype=torch.float).to(device)
+                agent_reward += reward["game_end"] * self.defeat_reward
+                agent_reward += reward["capture_token"] * self.captured_reward
+
+            rewards.append(agent_reward)
+        
+        return sum_lprob, self._compute_returns(rewards)    
 
     
 class TripleModelReinforce(ReinforceAgent):

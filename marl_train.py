@@ -12,7 +12,8 @@ def train_agent(
     evaluate_agent: MarelleAgent,
     log_training: bool,
     save_model_freq: int,
-    evaluate_freq: int):
+    evaluate_freq: int,
+    session=None):
 
     if log_training:
         wandb.config.n_trajectories = n_trajectories
@@ -44,7 +45,7 @@ def train_agent(
     trained_agent.train(n_trajectories, n_epochs, opponent_agent, evaluate_agent, log_training, save_model_freq, evaluate_freq)
 
     if log_training:
-        run.finish()
+        session.finish()
     
 def adversarial_training(
     env: MarelleGymEnv,

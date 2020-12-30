@@ -6,10 +6,8 @@ import numpy as np
 
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
-    print("Using GPU")
 else:
     device = torch.device("cpu")
-    print("WARNING: CPU only, this will be slow!")
 
 class FCModel(nn.Module):
     def __init__(self, dim_observation, n_actions):
