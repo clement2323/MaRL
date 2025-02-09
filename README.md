@@ -25,5 +25,4 @@ Clone the repository:
 $ git clone https://github.com/clement2323/MaRL.git
 $ cd MaRL
 ```
-
-(rules)[https://en.wikipedia.org/wiki/Nine_men%27s_morris]
+[rules](https://en.wikipedia.org/wiki/Nine_men%27s_morris)
