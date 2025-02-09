@@ -26,3 +26,4 @@ $ git clone https://github.com/clement2323/MaRL.git
 $ cd MaRL
 ```
 [rules](https://en.wikipedia.org/wiki/Nine_men%27s_morris)
+![board](9mens.png)
